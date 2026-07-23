@@ -1,0 +1,26 @@
+# Build outputs
+app/dist
+admin/dist
+
+# Package managers
+node_modules
+packages/**/node_modules
+pnpm-lock.yaml
+
+# Logs
+*.log
+
+# Generated (project-specific)
+app/public
+admin/public
+app/api-templates
+admin/api-templates
+app/src/request
+admin/src/request
+admin/src/assets/fonts/iconfont.js
+admin/src/assets/json
+
+# Generated (packages)
+packages/**/public
+packages/**/api-templates
+packages/**/src/request

@@ -1,0 +1,1 @@
+ALTER Table comments DROP COLUMN status;

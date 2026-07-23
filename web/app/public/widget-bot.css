@@ -1,0 +1,315 @@
+/* 挂件按钮基础样式 */
+.widget-bot-button {
+  position: fixed;
+  z-index: 9999;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease-in-out;
+  color: #646a73;
+  background-color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: var(--font-gilory, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif);
+  border: none;
+  outline: none;
+  opacity: 0;
+  /* 优化拖拽性能 */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  transform-origin: center;
+}
+
+.widget-bot-button:hover {
+  transform: scale(1.1);
+}
+
+.widget-bot-button.dragging {
+  cursor: grabbing;
+}
+
+.widget-bot-button-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: inherit;
+}
+
+/* 图标样式 */
+.widget-bot-icon {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* 文字样式 */
+.widget-bot-text {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+.widget-bot-text span {
+  display: block;
+  margin: 1px 0;
+}
+
+/* 侧边吸附按钮样式 */
+.widget-bot-side-sticky {
+  width: 48px;
+  padding: 8px 8px 12px 8px;
+  background: #FFFFFF;
+  box-shadow: 0px 6px 30px 6px rgba(33, 34, 45, 0.03), 0px 4px 12px -6px rgba(33, 34, 45, 0.05), 0px 4px 12px 0px rgba(33, 34, 45, 0.03);
+  border-radius: 20px;
+  min-height: auto;
+}
+
+/* 浅色主题样式 - 显式定义 */
+.widget-bot-side-sticky[data-theme="dark"] {
+  background: #202531;
+  color: #FFFFFF;
+}
+
+.widget-bot-side-sticky .widget-bot-icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+}
+
+.widget-bot-side-sticky .widget-bot-text {
+  font-size: 12px;
+  /* color: #646a73; */
+  line-height: 16px;
+}
+
+/* 悬浮球按钮样式 */
+.widget-bot-hover-ball {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background: #FFFFFF;
+  box-shadow: 0px 6px 16px 0px rgba(33, 34, 45, 0.02), 0px 8px 40px 0px rgba(50, 73, 45, 0.12);
+  border: 1px solid #ECEEF1;
+  padding: 0;
+  min-height: auto;
+}
+
+/* 浅色主题样式 - 显式定义 */
+.widget-bot-hover-ball[data-theme="dark"] {
+  background: #202531;
+}
+
+.widget-bot-hover-ball .widget-bot-hover-ball-icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 0;
+}
+
+/* 模态框样式 - 基于MUI主题 */
+.widget-bot-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.widget-bot-modal-fixed {
+  align-items: center;
+  justify-content: center;
+}
+
+.widget-bot-modal-content {
+  position: absolute;
+  width: 600px;
+  height: 725px;
+  max-width: calc(100% - 32px);
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.widget-bot-modal-content-fixed {
+  position: relative;
+  width: 800px;
+  height: auto;
+  max-height: 90vh;
+  margin: auto;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 关闭按钮样式 - 透明框 */
+.widget-bot-close-btn {
+  position: absolute;
+  top: 22.5px;
+  right: 16px;
+  background: transparent;
+  width: 36.26px;
+  height: 25px;
+  border: none;
+  border-radius: 0;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+  opacity: 1;
+  z-index: 10001;
+  transition: none;
+  font-family: var(--font-gilory, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  /* 允许鼠标穿透到下方 */
+}
+
+/* iframe样式 */
+.widget-bot-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 10px;
+  display: block;
+  background: #F8F9FA;
+}
+
+.widget-bot-modal-content-fixed .widget-bot-iframe {
+  min-height: 600px;
+  height: auto;
+}
+
+/* 防止页面滚动 */
+body.widget-bot-modal-open {
+  overflow: hidden;
+}
+
+/* 移动端适配 - 统一处理 */
+@media (max-width: 768px) {
+  .widget-bot-side-sticky {
+    width: 48px;
+    padding: 6px 6px 12px 6px;
+    border-radius: 24px;
+  }
+
+  .widget-bot-hover-ball {
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
+    padding: 0;
+  }
+
+  .widget-bot-hover-ball .widget-bot-hover-ball-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 0;
+  }
+
+  .widget-bot-text {
+    font-size: 12px;
+  }
+
+  .widget-bot-icon {
+    width: 16px;
+    height: 16px;
+    margin-bottom: 6px;
+  }
+
+  /* 移动端弹框统一居中显示，宽度100%-32px，高度90vh */
+  .widget-bot-modal-content {
+    position: relative !important;
+    width: calc(100% - 32px) !important;
+    height: 90vh !important;
+    max-width: none !important;
+    max-height: 90vh !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    margin: auto !important;
+  }
+
+  .widget-bot-modal-content-fixed {
+    width: calc(100% - 32px) !important;
+    height: 90vh !important;
+    max-height: 90vh !important;
+  }
+
+  .widget-bot-close-btn {
+    top: 22.5px;
+    right: 16px;
+    width: 36.26px;
+    height: 25px;
+    font-size: 0;
+  }
+}
+
+/* 确保挂件不会被其他元素遮挡 */
+.widget-bot-button,
+.widget-bot-modal {
+  pointer-events: auto;
+}
+
+/* 加载状态 */
+.widget-bot-button.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.widget-bot-button.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #FFFFFF;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 减少动画模式支持 */
+@media (prefers-reduced-motion: reduce) {
+
+  .widget-bot-button,
+  .widget-bot-modal-content,
+  .widget-bot-close-btn,
+  .widget-bot-text span {
+    animation: none;
+    transition: none;
+  }
+
+  .widget-bot-button:hover,
+  .widget-bot-button.dragging {
+    transform: none;
+  }
+}
