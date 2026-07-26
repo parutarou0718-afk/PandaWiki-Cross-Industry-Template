@@ -50,7 +50,7 @@ func NewShareChatHandler(
 			return func(c echo.Context) error {
 				c.Response().Header().Set("Access-Control-Allow-Origin", "*")
 				c.Response().Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-				c.Response().Header().Set("Access-Control-Allow-Headers", "Content-Type, Origin, Accept")
+				c.Response().Header().Set("Access-Control-Allow-Headers", "Content-Type, Origin, Accept, Authorization, X-KB-ID")
 				if c.Request().Method == "OPTIONS" {
 					return c.NoContent(http.StatusOK)
 				}
@@ -302,7 +302,8 @@ func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
 	// validate api bot settings
 	appBot, err := h.appUsecase.GetOpenAIAPIAppInfo(c.Request().Context(), kbID)
 	if err != nil {
-		return h.sendOpenAIError(c, err.Error(), "internal_error")
+		h.logger.Error("get OpenAI API app info failed", log.Error(err))
+		return h.sendOpenAIError(c, "failed to initialize API bot", "internal_error")
 	}
 	if !appBot.Settings.OpenAIAPIBotSettings.IsEnabled {
 		return h.sendOpenAIError(c, "API Bot is not enabled", "forbidden")
@@ -337,7 +338,8 @@ func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
 
 	eventCh, err := h.chatUsecase.Chat(c.Request().Context(), chatReq)
 	if err != nil {
-		return h.sendOpenAIError(c, err.Error(), "internal_error")
+		h.logger.Error("OpenAI API chat failed", log.Error(err))
+		return h.sendOpenAIError(c, "failed to start chat", "internal_error")
 	}
 
 	// handle stream response

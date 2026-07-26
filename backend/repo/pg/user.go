@@ -48,8 +48,11 @@ func (r *UserRepository) UpsertDefaultUser(ctx context.Context, user *domain.Use
 			}
 			return nil
 		}
-		// User exists, update password
-		return tx.Model(&existingUser).Update("password", user.Password).Error
+		// The deployment bootstrap account must retain full administrator access.
+		return tx.Model(&existingUser).Updates(map[string]interface{}{
+			"password": user.Password,
+			"role":     user.Role,
+		}).Error
 	})
 }
 

@@ -211,7 +211,7 @@ func (u *ChatUsecase) Chat(ctx context.Context, req *domain.ChatRequest) (<-chan
 		}
 
 		if req.Info.UserInfo.AuthUserID == 0 {
-			auth, _ := u.AuthRepo.GetAuthBySourceType(ctx, req.AppType.ToSourceType())
+			auth, _ := u.AuthRepo.GetAuthByKBIDAndSourceType(ctx, req.KBID, req.AppType.ToSourceType())
 			if auth != nil {
 				req.Info.UserInfo.AuthUserID = auth.ID
 			}
