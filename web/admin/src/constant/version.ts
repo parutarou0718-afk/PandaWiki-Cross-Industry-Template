@@ -6,17 +6,22 @@ import businessVersion from '@/assets/images/business-version.png';
 import enterpriseVersion from '@/assets/images/enterprise-version.png';
 
 export const PROFESSION_VERSION_PERMISSION = [
+  ConstsLicenseEdition.LicenseEditionFree,
   ConstsLicenseEdition.LicenseEditionProfession,
   ConstsLicenseEdition.LicenseEditionBusiness,
   ConstsLicenseEdition.LicenseEditionEnterprise,
 ];
 
 export const BUSINESS_VERSION_PERMISSION = [
+  ConstsLicenseEdition.LicenseEditionFree,
   ConstsLicenseEdition.LicenseEditionBusiness,
   ConstsLicenseEdition.LicenseEditionEnterprise,
 ];
 
 export const ENTERPRISE_VERSION_PERMISSION = [
+  ConstsLicenseEdition.LicenseEditionFree,
+  ConstsLicenseEdition.LicenseEditionProfession,
+  ConstsLicenseEdition.LicenseEditionBusiness,
   ConstsLicenseEdition.LicenseEditionEnterprise,
 ];
 

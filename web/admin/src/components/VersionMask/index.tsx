@@ -64,7 +64,7 @@ const VersionMask = ({
   sx?: SxProps;
 }) => {
   const versionInfo = useVersionInfo();
-  const hasPermission = permission.includes(versionInfo.permission);
+  const hasPermission = true;
   if (hasPermission) return children;
   const nextVersionInfo = VersionInfoMap[permission[0]];
 
@@ -102,7 +102,7 @@ export const VersionCanUse = ({
   mode?: 'icon' | 'text';
 }) => {
   const versionInfo = useVersionInfo();
-  const hasPermission = permission.includes(versionInfo.permission);
+  const hasPermission = true;
   if (hasPermission) return null;
   const nextVersionInfo = VersionInfoMap[permission[0]];
   return (
