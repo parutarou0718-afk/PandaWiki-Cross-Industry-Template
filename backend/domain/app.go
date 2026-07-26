@@ -42,6 +42,35 @@ var AppTypes = []AppType{
 	AppTypeMcpServer,
 }
 
+var (
+	ErrOpenAIAPITokenNotFound                  = errors.New("OpenAI API token is not associated with an enabled knowledge base")
+	ErrOpenAIAPIKnowledgeBaseNotAuthorized     = errors.New("OpenAI API token is not authorized for the requested knowledge base")
+	ErrOpenAIAPIKnowledgeBaseSelectionRequired = errors.New("OpenAI API token is authorized for multiple knowledge bases; X-KB-ID is required")
+)
+
+// ResolveOpenAIAPIBotKnowledgeBase selects a knowledge base from the enabled
+// OpenAI API apps that have already been authorized for a Bearer token.
+func ResolveOpenAIAPIBotKnowledgeBase(apps []*App, requestedKBID string) (*App, error) {
+	if len(apps) == 0 {
+		return nil, ErrOpenAIAPITokenNotFound
+	}
+
+	if requestedKBID != "" {
+		for _, app := range apps {
+			if app != nil && app.KBID == requestedKBID {
+				return app, nil
+			}
+		}
+		return nil, ErrOpenAIAPIKnowledgeBaseNotAuthorized
+	}
+
+	if len(apps) == 1 && apps[0] != nil {
+		return apps[0], nil
+	}
+
+	return nil, ErrOpenAIAPIKnowledgeBaseSelectionRequired
+}
+
 func (t AppType) ToSourceType() consts.SourceType {
 	switch t {
 	case AppTypeWeb:

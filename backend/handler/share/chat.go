@@ -2,6 +2,7 @@ package share
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -257,7 +258,7 @@ func (h *ShareChatHandler) FeedBack(c echo.Context) error {
 //	@Tags			share_chat
 //	@Accept			json
 //	@Produce		json
-//	@Param			X-KB-ID	header		string							true	"Knowledge Base ID"
+//	@Param			X-KB-ID	header		string							false	"Optional knowledge base ID for tokens authorized for multiple knowledge bases"
 //	@Param			request	body		domain.OpenAICompletionsRequest	true	"OpenAI API request"
 //	@Success		200		{object}	domain.OpenAICompletionsResponse
 //	@Failure		400		{object}	domain.OpenAIErrorResponse
@@ -267,12 +268,6 @@ func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		h.logger.Error("parse OpenAI request failed", log.Error(err))
 		return h.sendOpenAIError(c, "parse request failed", "invalid_request_error")
-	}
-
-	// get kb id from header
-	kbID := c.Request().Header.Get("X-KB-ID")
-	if kbID == "" {
-		return h.sendOpenAIError(c, "X-KB-ID header is required", "invalid_request_error")
 	}
 
 	if err := c.Validate(&req); err != nil {
@@ -299,31 +294,32 @@ func (h *ShareChatHandler) ChatCompletions(c echo.Context) error {
 		return h.sendOpenAIError(c, "no user message found", "invalid_request_error")
 	}
 
-	// validate api bot settings
-	appBot, err := h.appUsecase.GetOpenAIAPIAppInfo(c.Request().Context(), kbID)
-	if err != nil {
-		h.logger.Error("get OpenAI API app info failed", log.Error(err))
-		return h.sendOpenAIError(c, "failed to initialize API bot", "internal_error")
-	}
-	if !appBot.Settings.OpenAIAPIBotSettings.IsEnabled {
-		return h.sendOpenAIError(c, "API Bot is not enabled", "forbidden")
-	}
-
 	secretKeyHeader := c.Request().Header.Get("Authorization")
 	if secretKeyHeader == "" {
-		return h.sendOpenAIError(c, "Authorization header is required", "invalid_request_error")
+		return h.sendOpenAIErrorWithStatus(c, http.StatusUnauthorized, "Authorization header is required", "unauthorized")
 	}
-	if secretKey, found := strings.CutPrefix(secretKeyHeader, "Bearer "); !found {
-		return h.sendOpenAIError(c, "Invalid Authorization key format", "invalid_request_error")
-	} else {
-		if appBot.Settings.OpenAIAPIBotSettings.SecretKey != secretKey {
-			return h.sendOpenAIError(c, "Invalid Authorization key", "unauthorized")
+	secretKey, found := strings.CutPrefix(secretKeyHeader, "Bearer ")
+	if !found || strings.TrimSpace(secretKey) == "" {
+		return h.sendOpenAIErrorWithStatus(c, http.StatusUnauthorized, "Invalid Authorization key", "unauthorized")
+	}
+
+	appBot, err := h.appUsecase.ResolveOpenAIAPIAppByToken(
+		c.Request().Context(),
+		secretKey,
+		c.Request().Header.Get("X-KB-ID"),
+	)
+	if err != nil {
+		status := openAIAPIResolutionErrorStatus(err)
+		if status == http.StatusInternalServerError {
+			h.logger.Error("resolve OpenAI API token failed", log.Error(err))
+			return h.sendOpenAIErrorWithStatus(c, status, "failed to initialize API bot", "internal_error")
 		}
+		return h.sendOpenAIErrorWithStatus(c, status, err.Error(), openAIAPIResolutionErrorType(err))
 	}
 
 	chatReq := &domain.ChatRequest{
 		Message:  lastUserMessage,
-		KBID:     kbID,
+		KBID:     appBot.KBID,
 		AppType:  domain.AppTypeOpenAIAPI,
 		RemoteIP: c.RealIP(),
 	}
@@ -394,7 +390,10 @@ func (h *ShareChatHandler) handleOpenAIStreamResponse(c echo.Context, eventCh <-
 					},
 				},
 			}
-			return h.writeOpenAIStreamEvent(c, streamResp)
+			if err := h.writeOpenAIStreamEvent(c, streamResp); err != nil {
+				return err
+			}
+			return h.writeOpenAIStreamDone(c)
 		}
 	}
 	return nil
@@ -436,13 +435,41 @@ func (h *ShareChatHandler) handleOpenAINonStreamResponse(c echo.Context, eventCh
 }
 
 func (h *ShareChatHandler) sendOpenAIError(c echo.Context, message, errorType string) error {
+	return h.sendOpenAIErrorWithStatus(c, http.StatusBadRequest, message, errorType)
+}
+
+func (h *ShareChatHandler) sendOpenAIErrorWithStatus(c echo.Context, status int, message, errorType string) error {
 	errResp := domain.OpenAIErrorResponse{
 		Error: domain.OpenAIError{
 			Message: message,
 			Type:    errorType,
 		},
 	}
-	return c.JSON(http.StatusBadRequest, errResp)
+	return c.JSON(status, errResp)
+}
+
+func openAIAPIResolutionErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, domain.ErrOpenAIAPITokenNotFound):
+		return http.StatusUnauthorized
+	case errors.Is(err, domain.ErrOpenAIAPIKnowledgeBaseNotAuthorized):
+		return http.StatusForbidden
+	case errors.Is(err, domain.ErrOpenAIAPIKnowledgeBaseSelectionRequired):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func openAIAPIResolutionErrorType(err error) string {
+	switch openAIAPIResolutionErrorStatus(err) {
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	default:
+		return "invalid_request_error"
+	}
 }
 
 func (h *ShareChatHandler) writeOpenAIStreamEvent(c echo.Context, data domain.OpenAIStreamResponse) error {
@@ -453,6 +480,14 @@ func (h *ShareChatHandler) writeOpenAIStreamEvent(c echo.Context, data domain.Op
 
 	sseMessage := fmt.Sprintf("data: %s\n\n", string(jsonContent))
 	if _, err := c.Response().Write([]byte(sseMessage)); err != nil {
+		return err
+	}
+	c.Response().Flush()
+	return nil
+}
+
+func (h *ShareChatHandler) writeOpenAIStreamDone(c echo.Context) error {
+	if _, err := c.Response().Write([]byte("data: [DONE]\n\n")); err != nil {
 		return err
 	}
 	c.Response().Flush()

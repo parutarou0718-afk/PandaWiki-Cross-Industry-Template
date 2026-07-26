@@ -5817,10 +5817,10 @@ paths:
       - application/json
       description: OpenAI API compatible chat completions endpoint
       parameters:
-      - description: Knowledge Base ID
+      - description: Optional knowledge base ID for tokens authorized for multiple
+          knowledge bases
         in: header
         name: X-KB-ID
-        required: true
         type: string
       - description: OpenAI API request
         in: body

@@ -3832,10 +3832,9 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Knowledge Base ID",
+                        "description": "Optional knowledge base ID for tokens authorized for multiple knowledge bases",
                         "name": "X-KB-ID",
-                        "in": "header",
-                        "required": true
+                        "in": "header"
                     },
                     {
                         "description": "OpenAI API request",

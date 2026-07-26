@@ -89,6 +89,21 @@ func (r *AppRepository) GetAppsByTypes(ctx context.Context, appTypes []domain.Ap
 	return apps, nil
 }
 
+// ListEnabledOpenAIAPIAppsBySecretKey finds only enabled OpenAI API apps
+// matching a supplied API token. It intentionally does not create app records.
+func (r *AppRepository) ListEnabledOpenAIAPIAppsBySecretKey(ctx context.Context, secretKey string) ([]*domain.App, error) {
+	var apps []*domain.App
+	if err := r.db.WithContext(ctx).
+		Model(&domain.App{}).
+		Where("type = ?", domain.AppTypeOpenAIAPI).
+		Where("settings -> 'openai_api_bot_settings' ->> 'secret_key' = ?", secretKey).
+		Where("settings -> 'openai_api_bot_settings' ->> 'is_enabled' = 'true'").
+		Find(&apps).Error; err != nil {
+		return nil, err
+	}
+	return apps, nil
+}
+
 func (r *AppRepository) GetAppList(ctx context.Context, kbID string) (map[string]*domain.App, error) {
 	var apps []*domain.App
 	if err := r.db.WithContext(ctx).

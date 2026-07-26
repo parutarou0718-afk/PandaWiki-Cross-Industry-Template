@@ -1,3 +1,16 @@
+# OpenAI-compatible chat API
+
+管理员在目标知识库中启用“问答机器人 API”并生成 API Token 后，标准 OpenAI-compatible 客户端可直接调用；普通单知识库 Token 不需要 `X-KB-ID`：
+
+```bash
+curl http://<server-ip>:2444/share/v1/chat/completions \
+  -H "Authorization: Bearer <API_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"knowledge-base","messages":[{"role":"user","content":"总结知识库资料。"}],"stream":false}'
+```
+
+若同一个 Token 被明确授权给多个知识库，才需要增加 `X-KB-ID` 来选择其中一个已授权知识库。请勿将 Token 写入源代码、截图或日志。完整用法与错误说明见 [`docs/openai-compatible-chat-api.md`](../docs/openai-compatible-chat-api.md)。
+
 # Ubuntu 全新部署指南
 
 此目录部署的是本仓库的自托管无限版：旧的开源版、专业版、商业版、企业版功能门槛与数量配额均已取消；用户、知识库、用户组和节点权限仍然有效。

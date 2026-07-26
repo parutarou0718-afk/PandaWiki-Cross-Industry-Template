@@ -973,6 +973,16 @@ func (u *AppUsecase) GetOpenAIAPIAppInfo(ctx context.Context, kbID string) (*dom
 	return appInfo, nil
 }
 
+// ResolveOpenAIAPIAppByToken resolves a token to an enabled OpenAI API app.
+// X-KB-ID is optional for tokens that are authorized for exactly one knowledge base.
+func (u *AppUsecase) ResolveOpenAIAPIAppByToken(ctx context.Context, secretKey, requestedKBID string) (*domain.App, error) {
+	apps, err := u.repo.ListEnabledOpenAIAPIAppsBySecretKey(ctx, secretKey)
+	if err != nil {
+		return nil, err
+	}
+	return domain.ResolveOpenAIAPIBotKnowledgeBase(apps, requestedKBID)
+}
+
 // filterNodesByPermissions 对节点列表进行权限过滤
 func (u *AppUsecase) filterNodesByPermissions(nodes []*domain.RecommendNodeListResp, nodeVisibleGroupIds, nodeVisitableGroupIds []string) []*domain.RecommendNodeListResp {
 	filteredNodes := make([]*domain.RecommendNodeListResp, 0)
