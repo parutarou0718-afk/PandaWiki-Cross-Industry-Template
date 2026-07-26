@@ -69,28 +69,23 @@ stored data still parse. Product marketing/version-comparison presentation is
 removed from normal administration flows rather than falsely displaying the
 installation as a paid upstream tier.
 
-### 4. Local bootstrap administrator command
+### 4. Deployment administrator bootstrap
 
-A new server-local admin command is added under `backend/cmd/admin`. It is
-invoked only by a shell inside the deployed host or API container, for example:
+The repository already supplies a deployment-only administrator bootstrap:
+when `ADMIN_PASSWORD` is configured, startup creates or updates the `admin`
+account. V1 keeps this existing mechanism rather than adding another command
+surface. It is corrected so an existing `admin` account is always restored to
+the administrator role when the deployment operator explicitly configures
+`ADMIN_PASSWORD`.
 
-```text
-./pandawiki admin bootstrap --username <username> --reset-password
-```
+It must:
 
-The final command syntax must follow the repository's command conventions.
-It may create an administrator or elevate an existing account, and may reset a
-password only when explicitly requested. It must:
-
-- require an operator-supplied username and password or interactive secure
-  input;
+- require an operator-supplied deployment secret;
 - never create a default root account;
 - never contain a compiled-in credential;
 - avoid emitting passwords in output or logs;
-- make its change through the existing user/role persistence path;
-- write a minimal audit log without sensitive values.
-
-There is no HTTP equivalent and no hidden UI control.
+- make its change through the existing user/role persistence path; and
+- have no HTTP equivalent or hidden UI control.
 
 ### 5. OpenAI-compatible chatbot API remains secured
 
@@ -127,8 +122,8 @@ another user's knowledge base or protected node.
 - Existing license fields may still be returned by APIs, but are no longer an
   authorization decision point for self-hosted features.
 - Existing databases require no destructive migration for the edition change.
-- The bootstrap command fails clearly if database configuration is unavailable,
-  the named user cannot be found/created, or password input is invalid.
+- Startup fails clearly if the configured bootstrap password cannot be hashed
+  or the `admin` user cannot be created/updated.
 - Enabling a feature does not silently create or overwrite user accounts,
   knowledge bases, tokens, or permissions.
 
@@ -142,7 +137,7 @@ Automated tests must cover:
 3. formerly edition-gated API/settings flows succeed for an authorized
    administrator and fail for an unauthorized user;
 4. the OpenAI bot uses the current KB's Auth/group scope;
-5. the local bootstrap command creates/elevates only the requested account and
+5. the `ADMIN_PASSWORD` bootstrap creates/elevates the `admin` account and
    does not log its password;
 6. the admin build contains no functional VersionMask gate or paid-upgrade
    message in affected controls.
@@ -155,7 +150,7 @@ separately and never masked.
 
 1. Establish backend self-hosted policy and tests.
 2. Remove direct backend edition gates and test preserved authorization.
-3. Add and test the server-local bootstrap administrator command.
+3. Correct and test the deployment administrator bootstrap.
 4. Remove admin UI gates and paid-version messaging; build the admin app.
 5. Enable and harden the existing OpenAI-compatible chatbot API scope/CORS
    behavior; perform end-to-end verification.
