@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"encoding/json"
 )
 
 const ContextKeyEditionLimitation contextKey = "edition_limitation"
@@ -23,23 +22,22 @@ type BaseEditionLimitation struct {
 	AllowNodeStats         bool  `json:"allow_node_stats"`           // 支持文档统计
 }
 
-var baseEditionLimitationDefault = BaseEditionLimitation{
-	MaxKb:    1,
-	MaxAdmin: 1,
-	MaxNode:  300,
+var selfHostedEditionLimitation = BaseEditionLimitation{
+	MaxKb:                  int(^uint(0) >> 1),
+	MaxNode:                int(^uint(0) >> 1),
+	MaxSSOUser:             int(^uint(0) >> 1),
+	MaxAdmin:               int64(^uint64(0) >> 1),
+	AllowAdminPerm:         true,
+	AllowCustomCopyright:   true,
+	AllowCommentAudit:      true,
+	AllowAdvancedBot:       true,
+	AllowWatermark:         true,
+	AllowCopyProtection:    true,
+	AllowOpenAIBotSettings: true,
+	AllowMCPServer:         true,
+	AllowNodeStats:         true,
 }
 
 func GetBaseEditionLimitation(c context.Context) BaseEditionLimitation {
-
-	edition, ok := c.Value(ContextKeyEditionLimitation).([]byte)
-	if !ok {
-		return baseEditionLimitationDefault
-	}
-
-	var editionLimitation BaseEditionLimitation
-	if err := json.Unmarshal(edition, &editionLimitation); err != nil {
-		return baseEditionLimitationDefault
-	}
-
-	return editionLimitation
+	return selfHostedEditionLimitation
 }
