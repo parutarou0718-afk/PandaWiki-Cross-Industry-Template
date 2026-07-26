@@ -28,7 +28,14 @@ go.work.sum
 
 .vscode
 
-deploy
+# Track the deployment templates, but never their operator secrets or data.
+deploy/*
+!deploy/.gitignore
+!deploy/.env.example
+!deploy/docker-compose.yml
+!deploy/README.md
+!deploy/scripts/
+!deploy/scripts/**
 local
 
 .idea
