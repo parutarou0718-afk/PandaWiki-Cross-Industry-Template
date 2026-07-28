@@ -151,6 +151,7 @@ func createApp() (*App, error) {
 	reportHandler := v1.NewReportHandler(echo, baseHandler, logger, authMiddleware, reportUsecase)
 	reportProfileAdminUsecase := usecase.NewReportProfileAdminUsecase(reportProfileRepo)
 	reportProfileAdminHandler := v1.NewReportProfileAdminHandler(echo, baseHandler, authMiddleware, reportProfileAdminUsecase)
+	knowledgeSearchHandler := v1.NewKnowledgeSearchHandler(echo, baseHandler, authMiddleware, chatUsecase)
 	apiHandlers := &v1.APIHandlers{
 		UserHandler:               userHandler,
 		KnowledgeBaseHandler:      knowledgeBaseHandler,
@@ -168,6 +169,7 @@ func createApp() (*App, error) {
 		EditionHandler:            editionHandler,
 		ReportHandler:             reportHandler,
 		ReportProfileAdminHandler: reportProfileAdminHandler,
+		KnowledgeSearchHandler:    knowledgeSearchHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)

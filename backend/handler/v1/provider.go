@@ -25,6 +25,7 @@ type APIHandlers struct {
 	EditionHandler            *EditionHandler
 	ReportHandler             *ReportHandler
 	ReportProfileAdminHandler *ReportProfileAdminHandler
+	KnowledgeSearchHandler    *KnowledgeSearchHandler
 }
 
 var ProviderSet = wire.NewSet(
@@ -48,6 +49,7 @@ var ProviderSet = wire.NewSet(
 	NewEditionHandler,
 	NewReportHandler,
 	NewReportProfileAdminHandler,
+	NewKnowledgeSearchHandler,
 
 	wire.Struct(new(APIHandlers), "*"),
 )
