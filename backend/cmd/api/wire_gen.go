@@ -143,20 +143,22 @@ func createApp() (*App, error) {
 	authV1Handler := v1.NewAuthV1Handler(echo, baseHandler, logger, authUsecase)
 	navUsecase := usecase.NewNavUsecase(navRepository, nodeRepository, ragRepository, logger)
 	navHandler := v1.NewNavHandler(baseHandler, echo, navUsecase, authMiddleware, logger)
+	knowledgeSearchHandler := v1.NewKnowledgeSearchHandler(echo, baseHandler, authMiddleware, chatUsecase)
 	apiHandlers := &v1.APIHandlers{
-		UserHandler:          userHandler,
-		KnowledgeBaseHandler: knowledgeBaseHandler,
-		NodeHandler:          nodeHandler,
-		AppHandler:           appHandler,
-		FileHandler:          fileHandler,
-		ModelHandler:         modelHandler,
-		ConversationHandler:  conversationHandler,
-		CrawlerHandler:       crawlerHandler,
-		CreationHandler:      creationHandler,
-		StatHandler:          statHandler,
-		CommentHandler:       commentHandler,
-		AuthV1Handler:        authV1Handler,
-		NavHandler:           navHandler,
+		UserHandler:            userHandler,
+		KnowledgeBaseHandler:   knowledgeBaseHandler,
+		NodeHandler:            nodeHandler,
+		AppHandler:             appHandler,
+		FileHandler:            fileHandler,
+		ModelHandler:           modelHandler,
+		ConversationHandler:    conversationHandler,
+		CrawlerHandler:         crawlerHandler,
+		CreationHandler:        creationHandler,
+		StatHandler:            statHandler,
+		CommentHandler:         commentHandler,
+		AuthV1Handler:          authV1Handler,
+		NavHandler:             navHandler,
+		KnowledgeSearchHandler: knowledgeSearchHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)
