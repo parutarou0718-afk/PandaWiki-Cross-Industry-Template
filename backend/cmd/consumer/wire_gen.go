@@ -57,12 +57,13 @@ func createApp() (*App, error) {
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
 	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
 	graphRepository := pg2.NewGraphRepository(db, logger)
+	knowledgeSchemaRepository := pg2.NewKnowledgeSchemaRepository(db, logger)
 	cacheCache, err := cache.NewCache(configConfig)
 	if err != nil {
 		return nil, err
 	}
 	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
-	graphUsecase := usecase.NewGraphUsecase(graphRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
+	graphUsecase := usecase.NewGraphUsecase(graphRepository, knowledgeSchemaRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
 	ragmqHandler, err := mq3.NewRAGMQHandler(mqConsumer, logger, ragService, nodeRepository, knowledgeBaseRepository, llmUsecase, modelUsecase, graphUsecase, ragRepository)
 	if err != nil {
 		return nil, err

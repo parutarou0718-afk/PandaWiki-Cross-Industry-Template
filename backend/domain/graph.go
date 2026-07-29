@@ -47,13 +47,14 @@ var (
 )
 
 type GraphEntity struct {
-	ID        string          `json:"id" gorm:"primaryKey;type:text"`
-	KBID      string          `json:"kb_id" gorm:"column:kb_id;not null;index"`
-	Name      string          `json:"name" gorm:"not null"`
-	NameKey   string          `json:"-" gorm:"column:name_key;not null"`
-	Type      GraphEntityType `json:"type" gorm:"not null"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID         string          `json:"id" gorm:"primaryKey;type:text"`
+	KBID       string          `json:"kb_id" gorm:"column:kb_id;not null;index"`
+	Name       string          `json:"name" gorm:"not null"`
+	NameKey    string          `json:"-" gorm:"column:name_key;not null"`
+	Type       GraphEntityType `json:"type" gorm:"not null"`
+	Attributes GraphAttributes `json:"attributes" gorm:"type:jsonb;not null"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
 func (GraphEntity) TableName() string { return "graph_entities" }
@@ -85,8 +86,9 @@ type GraphEvidence struct {
 func (GraphEvidence) TableName() string { return "graph_evidence" }
 
 type GraphExtractedEntity struct {
-	Name string          `json:"name"`
-	Type GraphEntityType `json:"type"`
+	Name       string          `json:"name"`
+	Type       GraphEntityType `json:"type"`
+	Attributes GraphAttributes `json:"attributes,omitempty"`
 }
 
 type GraphExtractedRelation struct {

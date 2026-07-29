@@ -14,24 +14,26 @@ import (
 // model output and persistence on the server side; clients only receive the
 // permission-filtered projection exposed by GraphRepository.
 type GraphUsecase struct {
-	graphRepo *pg.GraphRepository
-	nodeRepo  *pg.NodeRepository
-	authRepo  *pg.AuthRepo
-	llm       *LLMUsecase
-	models    *ModelUsecase
-	ragRepo   *mqRepo.RAGRepository
-	logger    *log.Logger
+	graphRepo  *pg.GraphRepository
+	schemaRepo *pg.KnowledgeSchemaRepository
+	nodeRepo   *pg.NodeRepository
+	authRepo   *pg.AuthRepo
+	llm        *LLMUsecase
+	models     *ModelUsecase
+	ragRepo    *mqRepo.RAGRepository
+	logger     *log.Logger
 }
 
-func NewGraphUsecase(graphRepo *pg.GraphRepository, nodeRepo *pg.NodeRepository, authRepo *pg.AuthRepo, llm *LLMUsecase, models *ModelUsecase, ragRepo *mqRepo.RAGRepository, logger *log.Logger) *GraphUsecase {
+func NewGraphUsecase(graphRepo *pg.GraphRepository, schemaRepo *pg.KnowledgeSchemaRepository, nodeRepo *pg.NodeRepository, authRepo *pg.AuthRepo, llm *LLMUsecase, models *ModelUsecase, ragRepo *mqRepo.RAGRepository, logger *log.Logger) *GraphUsecase {
 	return &GraphUsecase{
-		graphRepo: graphRepo,
-		nodeRepo:  nodeRepo,
-		authRepo:  authRepo,
-		llm:       llm,
-		models:    models,
-		ragRepo:   ragRepo,
-		logger:    logger.WithModule("usecase.graph"),
+		graphRepo:  graphRepo,
+		schemaRepo: schemaRepo,
+		nodeRepo:   nodeRepo,
+		authRepo:   authRepo,
+		llm:        llm,
+		models:     models,
+		ragRepo:    ragRepo,
+		logger:     logger.WithModule("usecase.graph"),
 	}
 }
 
@@ -80,7 +82,11 @@ func (u *GraphUsecase) RefreshNode(ctx context.Context, kbID, nodeReleaseID stri
 	if err != nil {
 		return fmt.Errorf("get graph extraction model: %w", err)
 	}
-	extraction, err := u.llm.ExtractGraphFacts(ctx, chatModel, nodeRelease.Name, nodeRelease.Content)
+	schema, err := u.schemaRepo.GetEffectiveSchema(ctx, kbID)
+	if err != nil {
+		return fmt.Errorf("get knowledge schema: %w", err)
+	}
+	extraction, err := u.llm.ExtractGraphFacts(ctx, chatModel, nodeRelease.Name, nodeRelease.Content, schema)
 	if err != nil {
 		return fmt.Errorf("extract graph facts: %w", err)
 	}
@@ -96,5 +102,22 @@ func (u *GraphUsecase) GetVisibleGraph(ctx context.Context, kbID string, authUse
 	if err != nil {
 		return nil, err
 	}
-	return u.graphRepo.GetVisibleGraph(ctx, kbID, groupIDs)
+	graph, err := u.graphRepo.GetVisibleGraph(ctx, kbID, groupIDs)
+	if err != nil {
+		return nil, err
+	}
+	schema, err := u.schemaRepo.GetEffectiveSchema(ctx, kbID)
+	if err != nil {
+		return nil, err
+	}
+	graph.Schema = schema
+	return graph, nil
+}
+
+func (u *GraphUsecase) GetSchema(ctx context.Context, kbID string) (domain.KnowledgeSchema, error) {
+	return u.schemaRepo.GetEffectiveSchema(ctx, kbID)
+}
+
+func (u *GraphUsecase) SaveSchema(ctx context.Context, kbID string, schema domain.KnowledgeSchema) error {
+	return u.schemaRepo.SaveSchema(ctx, kbID, schema)
 }

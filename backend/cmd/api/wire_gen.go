@@ -145,7 +145,8 @@ func createApp() (*App, error) {
 	navHandler := v1.NewNavHandler(baseHandler, echo, navUsecase, authMiddleware, logger)
 	knowledgeSearchHandler := v1.NewKnowledgeSearchHandler(echo, baseHandler, authMiddleware, chatUsecase)
 	graphRepository := pg2.NewGraphRepository(db, logger)
-	graphUsecase := usecase.NewGraphUsecase(graphRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
+	knowledgeSchemaRepository := pg2.NewKnowledgeSchemaRepository(db, logger)
+	graphUsecase := usecase.NewGraphUsecase(graphRepository, knowledgeSchemaRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
 	graphHandler := v1.NewGraphHandler(echo, baseHandler, authMiddleware, graphUsecase)
 	apiHandlers := &v1.APIHandlers{
 		UserHandler:            userHandler,

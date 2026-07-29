@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -209,7 +210,7 @@ func (u *LLMUsecase) Generate(
 // ExtractGraphFacts asks the configured server-side model for a strictly
 // bounded JSON projection.  The source document is not persisted by this
 // method and is never returned to a client.
-func (u *LLMUsecase) ExtractGraphFacts(ctx context.Context, configuredModel *domain.Model, name, content string) (domain.GraphExtraction, error) {
+func (u *LLMUsecase) ExtractGraphFacts(ctx context.Context, configuredModel *domain.Model, name, content string, knowledgeSchema domain.KnowledgeSchema) (domain.GraphExtraction, error) {
 	modelkitModel, err := configuredModel.ToModelkitModel()
 	if err != nil {
 		return domain.GraphExtraction{}, err
@@ -219,9 +220,7 @@ func (u *LLMUsecase) ExtractGraphFacts(ctx context.Context, configuredModel *dom
 		return domain.GraphExtraction{}, err
 	}
 	content = truncateRunes(content, graphExtractionMaxRunes)
-	prompt := `Extract a compact knowledge graph from the document below. Return JSON only, with exactly this shape:
-{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other"}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
-Use only facts supported by the document. Keep evidence at most 512 characters. Do not include Markdown, explanations, document content outside evidence, or extra fields.`
+	prompt := buildGraphExtractionPrompt(knowledgeSchema)
 	result, err := u.Generate(ctx, chatModel, []*schema.Message{
 		schema.SystemMessage(prompt),
 		schema.UserMessage("Document title: " + name + "\n\nDocument:\n" + content),
@@ -229,7 +228,39 @@ Use only facts supported by the document. Keep evidence at most 512 characters. 
 	if err != nil {
 		return domain.GraphExtraction{}, err
 	}
-	return parseGraphExtractionResponse(result)
+	extraction, err := parseGraphExtractionResponse(result)
+	if err != nil {
+		return domain.GraphExtraction{}, err
+	}
+	for _, entity := range extraction.Entities {
+		if err := knowledgeSchema.ValidateEntityAttributes(entity.Type, entity.Attributes); err != nil {
+			return domain.GraphExtraction{}, err
+		}
+	}
+	return extraction, nil
+}
+
+func buildGraphExtractionPrompt(schema domain.KnowledgeSchema) string {
+	type fieldProjection struct {
+		Key         string                         `json:"key"`
+		EntityTypes []domain.GraphEntityType       `json:"entity_types,omitempty"`
+		ValueType   domain.KnowledgeFieldValueType `json:"value_type"`
+		Multiple    bool                           `json:"multiple"`
+		Options     []string                       `json:"options,omitempty"`
+		Instruction string                         `json:"instruction"`
+	}
+	fields := make([]fieldProjection, 0, len(schema.Fields))
+	for _, field := range schema.Fields {
+		if !field.Enabled || field.Target != domain.KnowledgeFieldTargetEntity {
+			continue
+		}
+		fields = append(fields, fieldProjection{Key: field.Key, EntityTypes: field.EntityTypes, ValueType: field.ValueType, Multiple: field.Multiple, Options: field.Options, Instruction: field.ExtractInstruction})
+	}
+	fieldJSON, _ := json.Marshal(fields)
+	return `Extract a compact knowledge graph from the document below. Return JSON only, with exactly this shape:
+{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other","attributes":{"field_key":["value"]}}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
+Use only facts supported by the document. Keep evidence at most 512 characters. Attributes may contain only the enabled field definitions below. Every attribute value must be an array; omit unavailable fields. Do not include Markdown, explanations, document content outside evidence, or extra fields.
+Enabled field definitions: ` + string(fieldJSON)
 }
 
 func parseGraphExtractionResponse(value string) (domain.GraphExtraction, error) {

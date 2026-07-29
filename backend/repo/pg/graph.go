@@ -56,7 +56,7 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 
 		entities := make(map[string]*domain.GraphEntity, len(entityTypes))
 		for _, entity := range extraction.Entities {
-			stored, err := r.ensureEntity(tx, kbID, entity.Name, entity.Type)
+			stored, err := r.ensureEntity(tx, kbID, entity.Name, entity.Type, entity.Attributes)
 			if err != nil {
 				return err
 			}
@@ -68,7 +68,7 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 				if _, ok := entities[key]; ok {
 					continue
 				}
-				stored, err := r.ensureEntity(tx, kbID, name, entityTypes[key])
+				stored, err := r.ensureEntity(tx, kbID, name, entityTypes[key], domain.GraphAttributes{})
 				if err != nil {
 					return err
 				}
@@ -105,9 +105,15 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 	})
 }
 
-func (r *GraphRepository) ensureEntity(tx *gorm.DB, kbID, name string, entityType domain.GraphEntityType) (*domain.GraphEntity, error) {
-	entity := &domain.GraphEntity{ID: newGraphID(), KBID: kbID, Name: strings.TrimSpace(name), NameKey: domain.NormalizeGraphName(name), Type: entityType}
-	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "kb_id"}, {Name: "name_key"}}, DoNothing: true}).Create(entity).Error; err != nil {
+func (r *GraphRepository) ensureEntity(tx *gorm.DB, kbID, name string, entityType domain.GraphEntityType, attributes domain.GraphAttributes) (*domain.GraphEntity, error) {
+	entity := &domain.GraphEntity{ID: newGraphID(), KBID: kbID, Name: strings.TrimSpace(name), NameKey: domain.NormalizeGraphName(name), Type: entityType, Attributes: attributes}
+	if err := tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "kb_id"}, {Name: "name_key"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"attributes": gorm.Expr("graph_entities.attributes || EXCLUDED.attributes"),
+			"updated_at": gorm.Expr("NOW()"),
+		}),
+	}).Create(entity).Error; err != nil {
 		return nil, err
 	}
 	if err := tx.Where("kb_id = ? AND name_key = ?", kbID, entity.NameKey).First(entity).Error; err != nil {
@@ -130,6 +136,7 @@ func (r *GraphRepository) ensureRelation(tx *gorm.DB, kbID, sourceID, targetID s
 type VisibleGraph struct {
 	Entities  []domain.GraphEntity   `json:"entities"`
 	Relations []VisibleGraphRelation `json:"relations"`
+	Schema    domain.KnowledgeSchema `json:"schema"`
 }
 
 type VisibleGraphRelation struct {
