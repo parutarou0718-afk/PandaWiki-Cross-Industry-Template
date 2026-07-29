@@ -21,7 +21,7 @@ Knowledge navigation, filters, and node property display.
 
 Each knowledge base has one versioned schema with ordered navigation sections
 and field definitions. A field has a stable key, display label, extraction
-instruction, target (`entity`, `relation`, or `document`), supported entity
+instruction, target (`entity` in V0.1), supported entity
 types, value type, multiple/filterable/enabled flags, and optional enum values.
 
 Allowed value types are `text`, `number`, `date`, `boolean`, and `select`.
@@ -39,7 +39,7 @@ to the client.
 
 - `GET /api/v1/knowledge_base/graph/schema?kb_id=...` requires normal KB
   access and returns the safe effective schema.
-- `PUT /api/v1/knowledge_base/graph/schema` requires document-management
+- `PUT /api/v1/knowledge_base/graph/schema` requires full-control
   permission and validates the complete administrator schema.
 - `POST /api/v1/knowledge_base/graph/rebuild?kb_id=...` uses the existing
   graph queue and current effective schema.
