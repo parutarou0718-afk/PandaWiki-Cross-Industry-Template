@@ -23,6 +23,7 @@ type APIHandlers struct {
 	AuthV1Handler          *AuthV1Handler
 	NavHandler             *NavHandler
 	KnowledgeSearchHandler *KnowledgeSearchHandler
+	GraphHandler           *GraphHandler
 }
 
 var ProviderSet = wire.NewSet(
@@ -44,6 +45,7 @@ var ProviderSet = wire.NewSet(
 	NewAuthV1Handler,
 	NewNavHandler,
 	NewKnowledgeSearchHandler,
+	NewGraphHandler,
 
 	wire.Struct(new(APIHandlers), "*"),
 )

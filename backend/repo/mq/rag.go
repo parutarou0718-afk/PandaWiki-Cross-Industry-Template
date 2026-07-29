@@ -28,3 +28,16 @@ func (r *RAGRepository) AsyncUpdateNodeReleaseVector(ctx context.Context, reques
 	}
 	return nil
 }
+
+func (r *RAGRepository) AsyncExtractNodeGraph(ctx context.Context, request []*domain.NodeGraphExtractionRequest) error {
+	for _, item := range request {
+		requestBytes, err := json.Marshal(item)
+		if err != nil {
+			return err
+		}
+		if err := r.producer.Produce(ctx, domain.GraphTaskTopic, "", requestBytes); err != nil {
+			return err
+		}
+	}
+	return nil
+}

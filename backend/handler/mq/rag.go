@@ -9,6 +9,7 @@ import (
 	"github.com/chaitin/panda-wiki/log"
 	"github.com/chaitin/panda-wiki/mq"
 	"github.com/chaitin/panda-wiki/mq/types"
+	mqRepo "github.com/chaitin/panda-wiki/repo/mq"
 	"github.com/chaitin/panda-wiki/repo/pg"
 	"github.com/chaitin/panda-wiki/store/rag"
 	"github.com/chaitin/panda-wiki/usecase"
@@ -22,9 +23,11 @@ type RAGMQHandler struct {
 	kbRepo       *pg.KnowledgeBaseRepository
 	llmUsecase   *usecase.LLMUsecase
 	modelUsecase *usecase.ModelUsecase
+	graphUsecase *usecase.GraphUsecase
+	ragRepo      *mqRepo.RAGRepository
 }
 
-func NewRAGMQHandler(consumer mq.MQConsumer, logger *log.Logger, rag rag.RAGService, nodeRepo *pg.NodeRepository, kbRepo *pg.KnowledgeBaseRepository, llmUsecase *usecase.LLMUsecase, modelUsecase *usecase.ModelUsecase) (*RAGMQHandler, error) {
+func NewRAGMQHandler(consumer mq.MQConsumer, logger *log.Logger, rag rag.RAGService, nodeRepo *pg.NodeRepository, kbRepo *pg.KnowledgeBaseRepository, llmUsecase *usecase.LLMUsecase, modelUsecase *usecase.ModelUsecase, graphUsecase *usecase.GraphUsecase, ragRepo *mqRepo.RAGRepository) (*RAGMQHandler, error) {
 	h := &RAGMQHandler{
 		consumer:     consumer,
 		logger:       logger.WithModule("mq.rag"),
@@ -33,8 +36,13 @@ func NewRAGMQHandler(consumer mq.MQConsumer, logger *log.Logger, rag rag.RAGServ
 		kbRepo:       kbRepo,
 		llmUsecase:   llmUsecase,
 		modelUsecase: modelUsecase,
+		graphUsecase: graphUsecase,
+		ragRepo:      ragRepo,
 	}
 	if err := consumer.RegisterHandler(domain.VectorTaskTopic, h.HandleNodeContentVectorRequest); err != nil {
+		return nil, err
+	}
+	if err := consumer.RegisterHandler(domain.GraphTaskTopic, h.HandleNodeGraphExtractionRequest); err != nil {
 		return nil, err
 	}
 	return h, nil
@@ -118,6 +126,11 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		}
 
 		h.logger.Info("upsert node content vector success", log.Any("updated_ids", request.NodeReleaseID))
+		if err := h.ragRepo.AsyncExtractNodeGraph(ctx, []*domain.NodeGraphExtractionRequest{{KBID: request.KBID, NodeReleaseID: request.NodeReleaseID}}); err != nil {
+			// Graph extraction is additive. A queue failure must never roll back a
+			// successful vector update or make the node unreadable.
+			h.logger.Error("enqueue node graph extraction failed", log.String("kb_id", request.KBID), log.String("node_release_id", request.NodeReleaseID), log.Error(err))
+		}
 	case "delete":
 		h.logger.Info("delete node content vector request", log.Any("request", request))
 		kb, err := h.kbRepo.GetKnowledgeBaseByID(ctx, request.KBID)
@@ -167,5 +180,19 @@ func (h *RAGMQHandler) HandleNodeContentVectorRequest(ctx context.Context, msg t
 		h.logger.Info("summary node content vector success", log.Any("summary_id", request.NodeReleaseID), log.Any("summary", summary))
 	}
 
+	return nil
+}
+
+func (h *RAGMQHandler) HandleNodeGraphExtractionRequest(ctx context.Context, msg types.Message) error {
+	var request domain.NodeGraphExtractionRequest
+	if err := json.Unmarshal(msg.GetData(), &request); err != nil {
+		h.logger.Error("unmarshal node graph extraction request failed", log.Error(err))
+		return nil
+	}
+	if err := h.graphUsecase.RefreshNode(ctx, request.KBID, request.NodeReleaseID); err != nil {
+		// Preserve the consumer's existing non-blocking vector-task semantics:
+		// a model outage is observable but does not poison the queue forever.
+		h.logger.Error("refresh node graph failed", log.String("kb_id", request.KBID), log.String("node_release_id", request.NodeReleaseID), log.Error(err))
+	}
 	return nil
 }

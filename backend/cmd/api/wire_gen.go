@@ -144,6 +144,9 @@ func createApp() (*App, error) {
 	navUsecase := usecase.NewNavUsecase(navRepository, nodeRepository, ragRepository, logger)
 	navHandler := v1.NewNavHandler(baseHandler, echo, navUsecase, authMiddleware, logger)
 	knowledgeSearchHandler := v1.NewKnowledgeSearchHandler(echo, baseHandler, authMiddleware, chatUsecase)
+	graphRepository := pg2.NewGraphRepository(db, logger)
+	graphUsecase := usecase.NewGraphUsecase(graphRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
+	graphHandler := v1.NewGraphHandler(echo, baseHandler, authMiddleware, graphUsecase)
 	apiHandlers := &v1.APIHandlers{
 		UserHandler:            userHandler,
 		KnowledgeBaseHandler:   knowledgeBaseHandler,
@@ -159,6 +162,7 @@ func createApp() (*App, error) {
 		AuthV1Handler:          authV1Handler,
 		NavHandler:             navHandler,
 		KnowledgeSearchHandler: knowledgeSearchHandler,
+		GraphHandler:           graphHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)

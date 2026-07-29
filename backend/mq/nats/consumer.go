@@ -98,7 +98,7 @@ func (c *MQConsumer) registerJetStreamHandler(topic string, handler func(ctx con
 
 	// Choose deliver policy based on topic
 	var deliverPolicy nats.SubOpt
-	if topic == domain.VectorTaskTopic {
+	if topic == domain.VectorTaskTopic || topic == domain.GraphTaskTopic {
 		deliverPolicy = nats.DeliverNew()
 	} else {
 		deliverPolicy = nats.DeliverAll()

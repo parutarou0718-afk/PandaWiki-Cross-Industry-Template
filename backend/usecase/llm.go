@@ -38,8 +38,9 @@ type LLMUsecase struct {
 }
 
 const (
-	summaryChunkTokenLimit = 30720 // 30KB tokens per chunk
-	summaryMaxChunks       = 4     // max chunks to process for summary
+	summaryChunkTokenLimit  = 30720 // 30KB tokens per chunk
+	summaryMaxChunks        = 4     // max chunks to process for summary
+	graphExtractionMaxRunes = 60000
 )
 
 func NewLLMUsecase(config *config.Config, rag rag.RAGService, conversationRepo *pg.ConversationRepository, kbRepo *pg.KnowledgeBaseRepository, nodeRepo *pg.NodeRepository, modelRepo *pg.ModelRepository, promptRepo *pg.PromptRepo, logger *log.Logger) *LLMUsecase {
@@ -203,6 +204,55 @@ func (u *LLMUsecase) Generate(
 		return "", fmt.Errorf("generate failed: %w", err)
 	}
 	return resp.Content, nil
+}
+
+// ExtractGraphFacts asks the configured server-side model for a strictly
+// bounded JSON projection.  The source document is not persisted by this
+// method and is never returned to a client.
+func (u *LLMUsecase) ExtractGraphFacts(ctx context.Context, configuredModel *domain.Model, name, content string) (domain.GraphExtraction, error) {
+	modelkitModel, err := configuredModel.ToModelkitModel()
+	if err != nil {
+		return domain.GraphExtraction{}, err
+	}
+	chatModel, err := u.modelkit.GetChatModel(ctx, modelkitModel)
+	if err != nil {
+		return domain.GraphExtraction{}, err
+	}
+	content = truncateRunes(content, graphExtractionMaxRunes)
+	prompt := `Extract a compact knowledge graph from the document below. Return JSON only, with exactly this shape:
+{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other"}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
+Use only facts supported by the document. Keep evidence at most 512 characters. Do not include Markdown, explanations, document content outside evidence, or extra fields.`
+	result, err := u.Generate(ctx, chatModel, []*schema.Message{
+		schema.SystemMessage(prompt),
+		schema.UserMessage("Document title: " + name + "\n\nDocument:\n" + content),
+	})
+	if err != nil {
+		return domain.GraphExtraction{}, err
+	}
+	return parseGraphExtractionResponse(result)
+}
+
+func parseGraphExtractionResponse(value string) (domain.GraphExtraction, error) {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, "```") {
+		value = strings.TrimPrefix(value, "```json")
+		value = strings.TrimPrefix(value, "```")
+		if end := strings.LastIndex(value, "```"); end >= 0 {
+			value = value[:end]
+		}
+	}
+	return domain.ParseGraphExtraction(strings.TrimSpace(value))
+}
+
+func truncateRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit])
 }
 
 func (u *LLMUsecase) SummaryNode(ctx context.Context, kbID string, model *domain.Model, name, content string) (string, error) {

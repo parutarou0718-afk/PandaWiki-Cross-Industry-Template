@@ -56,15 +56,18 @@ func createApp() (*App, error) {
 	ragRepository := mq2.NewRAGRepository(mqProducer)
 	systemSettingRepo := pg2.NewSystemSettingRepo(db, logger)
 	modelUsecase := usecase.NewModelUsecase(modelRepository, nodeRepository, ragRepository, ragService, logger, configConfig, knowledgeBaseRepository, systemSettingRepo)
-	ragmqHandler, err := mq3.NewRAGMQHandler(mqConsumer, logger, ragService, nodeRepository, knowledgeBaseRepository, llmUsecase, modelUsecase)
+	graphRepository := pg2.NewGraphRepository(db, logger)
+	cacheCache, err := cache.NewCache(configConfig)
+	if err != nil {
+		return nil, err
+	}
+	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
+	graphUsecase := usecase.NewGraphUsecase(graphRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
+	ragmqHandler, err := mq3.NewRAGMQHandler(mqConsumer, logger, ragService, nodeRepository, knowledgeBaseRepository, llmUsecase, modelUsecase, graphUsecase, ragRepository)
 	if err != nil {
 		return nil, err
 	}
 	ragDocUpdateHandler, err := mq3.NewRagDocUpdateHandler(mqConsumer, logger, nodeRepository)
-	if err != nil {
-		return nil, err
-	}
-	cacheCache, err := cache.NewCache(configConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +79,6 @@ func createApp() (*App, error) {
 	}
 	ipAddressRepo := ipdb2.NewIPAddressRepo(ipdbIPDB, logger)
 	geoRepo := cache2.NewGeoCache(cacheCache, db, logger)
-	authRepo := pg2.NewAuthRepo(db, logger, cacheCache)
 	statUseCase := usecase.NewStatUseCase(statRepository, nodeRepository, conversationRepository, appRepository, ipAddressRepo, geoRepo, authRepo, knowledgeBaseRepository, logger)
 	navRepository := pg2.NewNavRepository(db, logger)
 	userRepository := pg2.NewUserRepository(db, logger)
