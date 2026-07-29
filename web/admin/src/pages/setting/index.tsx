@@ -16,6 +16,7 @@ import CardRobot from './component/CardRobot';
 import CardSecurity from './component/CardSecurity';
 import CardWeb from './component/CardWeb';
 import CardMCP from './component/CardMCP';
+import CardKnowledgeSchema from './component/CardKnowledgeSchema';
 
 const SettingTabs: { label: string; id: string }[] = [
   { label: '门户网站', id: 'portal-website' },
@@ -25,6 +26,7 @@ const SettingTabs: { label: string; id: string }[] = [
   { label: '安全设置', id: 'security' },
   { label: '访问控制', id: 'backend-info' },
   { label: 'MCP 设置', id: 'mcp' },
+  { label: 'Knowledge model', id: 'knowledge-model' },
 ];
 
 const Setting = () => {
@@ -119,6 +121,7 @@ const Setting = () => {
         {activeTab === 'robot' && <CardRobot kb={kb} url={url} />}
         {activeTab === 'portal-website' && <CardWeb kb={kb} refresh={getKb} />}
         {activeTab === 'mcp' && <CardMCP kb={kb} />}
+        {activeTab === 'knowledge-model' && <CardKnowledgeSchema />}
       </Card>
     </Box>
   );
