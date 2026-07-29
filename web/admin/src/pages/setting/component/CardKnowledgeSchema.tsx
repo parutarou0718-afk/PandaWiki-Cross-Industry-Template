@@ -1,4 +1,4 @@
-import { getKnowledgeSchema, putKnowledgeSchema } from '@/api/KnowledgeSchema';
+import { getKnowledgeSchema, putKnowledgeSchema, rebuildKnowledgeGraph } from '@/api/KnowledgeSchema';
 import { useAppSelector } from '@/store';
 import { message } from '@ctzhian/ui';
 import { Add, Delete } from '@mui/icons-material';
@@ -13,6 +13,7 @@ const CardKnowledgeSchema = () => {
   const { kb_id } = useAppSelector(state => state.config);
   const [schema, setSchema] = useState<KnowledgeSchema | null>(null);
   const [saving, setSaving] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const load = () => { if (kb_id) getKnowledgeSchema(kb_id).then(setSchema).catch(() => setSchema(null)); };
   useEffect(load, [kb_id]);
   if (!kb_id || !schema) return <Box p={3}>Loading knowledge model…</Box>;
@@ -42,7 +43,7 @@ const CardKnowledgeSchema = () => {
     <Divider /><Typography variant='subtitle1' fontWeight={600}>Knowledge navigation</Typography>
     {schema.navigation.map((section, index) => <Stack key={`${section.id}-${index}`} direction='row' gap={2} alignItems='center' flexWrap='wrap'><TextField label='ID' value={section.id} onChange={event => updateSection(index, { id: event.target.value })} /><TextField label='Label' value={section.label} onChange={event => updateSection(index, { label: event.target.value })} /><TextField label='Order' type='number' value={section.order} onChange={event => updateSection(index, { order: Number(event.target.value) })} sx={{ width: 100 }} /><FormControlLabel control={<Checkbox checked={section.enabled} onChange={event => updateSection(index, { enabled: event.target.checked })} />} label='Enabled' /><Button color='error' size='small' onClick={() => setSchema(current => current && ({ ...current, navigation: current.navigation.filter((_, i) => i !== index) }))}>Remove</Button></Stack>)}
     <Button startIcon={<Add />} variant='outlined' onClick={() => setSchema(current => current && ({ ...current, navigation: [...current.navigation, blankSection(current.navigation.length + 1)] }))}>Add navigation group</Button>
-    <Stack direction='row' gap={2} mt={2}><Button variant='contained' onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save knowledge model'}</Button><Button variant='outlined' onClick={load}>Discard changes</Button></Stack>
+    <Stack direction='row' gap={2} mt={2}><Button variant='contained' onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save knowledge model'}</Button><Button variant='outlined' onClick={load}>Discard changes</Button><Button variant='outlined' disabled={rebuilding} onClick={() => { setRebuilding(true); rebuildKnowledgeGraph(kb_id).then(result => message.success(`Queued ${result.queued} documents for graph extraction.`)).finally(() => setRebuilding(false)); }}>{rebuilding ? 'Queueing…' : 'Rebuild graph from documents'}</Button></Stack>
     </Stack>
   </Box>;
 };

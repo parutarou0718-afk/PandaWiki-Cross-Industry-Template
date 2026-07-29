@@ -6,3 +6,6 @@ export const getKnowledgeSchema = (kb_id: string): Promise<KnowledgeSchema> =>
 
 export const putKnowledgeSchema = (kb_id: string, schema: KnowledgeSchema): Promise<KnowledgeSchema> =>
   request({ url: '/api/v1/knowledge_base/graph/schema', method: 'put', data: { kb_id, schema } });
+
+export const rebuildKnowledgeGraph = (kb_id: string): Promise<{ queued: number }> =>
+  request({ url: '/api/v1/knowledge_base/graph/rebuild', method: 'post', data: { kb_id } });
