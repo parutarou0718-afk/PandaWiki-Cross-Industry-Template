@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/chaitin/panda-wiki/config"
+	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 )
 
@@ -17,24 +18,63 @@ type MQProducer struct {
 	logger *log.Logger
 }
 
-func (p *MQProducer) EnsureStreams() error {
-	streams := []struct {
-		name     string
-		subjects []string
-	}{
+type managedStreamDefinition struct {
+	name     string
+	subjects []string
+}
+
+// managedStreamDefinitions is the single source of truth for subjects the
+// application expects JetStream to retain. Keep new task subjects here so an
+// existing deployment can be upgraded without manually recreating NATS data.
+func managedStreamDefinitions() []managedStreamDefinition {
+	return []managedStreamDefinition{
 		{
-			name:     "task",
-			subjects: []string{"apps.panda-wiki.summary.task", "apps.panda-wiki.vector.task"},
+			name: "task",
+			subjects: []string{
+				"apps.panda-wiki.summary.task",
+				domain.VectorTaskTopic,
+				domain.GraphTaskTopic,
+			},
 		},
 		{
 			name:     "scraper",
 			subjects: []string{"apps.panda-wiki.scraper.>"},
 		},
 	}
+}
+
+func mergeStreamSubjects(current, required []string) []string {
+	merged := append([]string(nil), current...)
+	for _, subject := range required {
+		found := false
+		for _, existing := range merged {
+			if existing == subject {
+				found = true
+				break
+			}
+		}
+		if !found {
+			merged = append(merged, subject)
+		}
+	}
+	return merged
+}
+
+func (p *MQProducer) EnsureStreams() error {
+	streams := managedStreamDefinitions()
 
 	for _, stream := range streams {
-		_, err := p.js.StreamInfo(stream.name)
+		info, err := p.js.StreamInfo(stream.name)
 		if err == nil {
+			subjects := mergeStreamSubjects(info.Config.Subjects, stream.subjects)
+			if len(subjects) != len(info.Config.Subjects) {
+				config := info.Config
+				config.Subjects = subjects
+				if _, err = p.js.UpdateStream(&config); err != nil {
+					return fmt.Errorf("failed to update stream %s subjects: %w", stream.name, err)
+				}
+				p.logger.Info("updated stream subjects", log.String("stream", stream.name), log.Any("subjects", subjects))
+			}
 			p.logger.Debug("stream already exists",
 				log.String("stream", stream.name))
 			continue
