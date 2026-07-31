@@ -16,3 +16,10 @@ func TestDecodeKnowledgeSchemaRequestRejectsUnknownFields(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+func TestDecodeGraphRebuildRequestReadsKBIDFromJSONBody(t *testing.T) {
+	req, err := decodeGraphRebuildRequest(strings.NewReader(`{"kb_id":"kb-1"}`))
+
+	require.NoError(t, err)
+	require.Equal(t, "kb-1", req.KBID)
+}

@@ -25,6 +25,10 @@ type graphQuery struct {
 	KBID string `query:"kb_id" validate:"required"`
 }
 
+type graphRebuildRequest struct {
+	KBID string `json:"kb_id"`
+}
+
 type knowledgeSchemaRequest struct {
 	KBID   string                 `json:"kb_id"`
 	Schema domain.KnowledgeSchema `json:"schema"`
@@ -84,15 +88,30 @@ func decodeKnowledgeSchemaRequest(reader io.Reader) (knowledgeSchemaRequest, err
 }
 
 func (h *GraphHandler) RebuildGraph(c echo.Context) error {
-	var query graphQuery
-	if err := c.Bind(&query); err != nil || strings.TrimSpace(query.KBID) == "" {
+	req, err := decodeGraphRebuildRequest(c.Request().Body)
+	if err != nil || req.KBID == "" {
 		return h.NewResponseWithError(c, "kb_id is required", err)
 	}
-	count, err := h.graph.EnqueueKnowledgeBase(c.Request().Context(), query.KBID)
+	count, err := h.graph.EnqueueKnowledgeBase(c.Request().Context(), req.KBID)
 	if err != nil {
 		return h.NewResponseWithError(c, "queue knowledge graph rebuild failed", err)
 	}
 	return h.NewResponseWithData(c, map[string]int{"queued": count})
+}
+
+func decodeGraphRebuildRequest(reader io.Reader) (graphRebuildRequest, error) {
+	var req graphRebuildRequest
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		return graphRebuildRequest{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return graphRebuildRequest{}, io.ErrUnexpectedEOF
+	}
+	req.KBID = strings.TrimSpace(req.KBID)
+	return req, nil
 }
 
 func (h *GraphHandler) GetGraph(c echo.Context) error {
