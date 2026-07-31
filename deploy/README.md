@@ -1,5 +1,23 @@
 # OpenAI-compatible chat API
 
+## Self-hosted API Token and user access
+
+The self-hosted control console supports the existing knowledge-base API Token
+screen without a commercial license. Open a knowledge base, go to its settings,
+then use **API Token** to create, list, update, or revoke tokens. These actions
+remain restricted to a signed-in member with `full_control` for that knowledge
+base; API Tokens themselves can never administer users or other knowledge bases.
+
+The system administration screen can also create normal `user` accounts. When
+creating a normal user, assign that user to a knowledge base and choose
+`full_control`, `doc_manage`, or `data_operate`. Account creation remains an
+administrator-only action, and server-side knowledge-base and node permissions
+continue to be enforced.
+
+Upgrading this capability needs no database migration. Rebuild and recreate the
+`api` service after pulling the new commit; do not remove PostgreSQL, NATS,
+MinIO, or vector volumes.
+
 管理员在目标知识库中启用“问答机器人 API”并生成 API Token 后，标准 OpenAI-compatible 客户端可直接调用；普通单知识库 Token 不需要 `X-KB-ID`：
 
 ```bash
