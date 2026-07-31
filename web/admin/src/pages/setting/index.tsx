@@ -17,6 +17,7 @@ import CardSecurity from './component/CardSecurity';
 import CardWeb from './component/CardWeb';
 import CardMCP from './component/CardMCP';
 import CardKnowledgeSchema from './component/CardKnowledgeSchema';
+import { canLoadKnowledgeSchema } from './component/knowledge-schema-editor';
 
 const SettingTabs: { label: string; id: string }[] = [
   { label: '门户网站', id: 'portal-website' },
@@ -37,15 +38,15 @@ const Setting = () => {
   const [url, setUrl] = useState<string>('');
   const [info, setInfo] = useState<DomainAppDetailResp>();
 
-  const getInfo = async () => {
-    const res = await getApiV1AppDetail({ kb_id: kb_id!, type: '1' });
+  const getInfo = async (currentKbID: string) => {
+    const res = await getApiV1AppDetail({ kb_id: currentKbID, type: '1' });
     setInfo(res);
   };
 
   const getKb = () => {
-    if (!kb_id) return;
+    if (!canLoadKnowledgeSchema(kb_id)) return;
     getApiV1KnowledgeBaseDetail({ id: kb_id }).then(res => setKb(res));
-    getInfo();
+    getInfo(kb_id);
   };
 
   const setActiveTab = (tab: string) => {
@@ -87,7 +88,8 @@ const Setting = () => {
     if (kb_id) getKb();
   }, [kb_id]);
 
-  if (!kb) return <></>;
+  if (!canLoadKnowledgeSchema(kb_id) || !kb)
+    return <Box p={3}>Loading knowledge base…</Box>;
 
   return (
     <Box
@@ -115,7 +117,7 @@ const Setting = () => {
         {activeTab === 'backend-info' && <CardKB />}
         {activeTab === 'ai-setting' && <CardAI kb={kb} />}
         {activeTab === 'security' && (
-          <CardSecurity data={info} kb={kb} refresh={getInfo} />
+          <CardSecurity data={info} kb={kb} refresh={() => getInfo(kb_id)} />
         )}
         {activeTab === 'feedback' && <CardFeedback kb={kb} />}
         {activeTab === 'robot' && <CardRobot kb={kb} url={url} />}

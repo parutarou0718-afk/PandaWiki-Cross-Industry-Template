@@ -5,6 +5,7 @@ import { Add, Delete } from '@mui/icons-material';
 import { Box, Button, Checkbox, Divider, FormControlLabel, MenuItem, Select, Stack, TextField, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { ENTITY_TYPES, type KnowledgeSchema, type KnowledgeSchemaField, type KnowledgeSchemaNavigation, validateKnowledgeSchema } from './knowledge-schema';
+import { canLoadKnowledgeSchema, knowledgeSchemaFieldRenderKey } from './knowledge-schema-editor';
 
 const blankField = (): KnowledgeSchemaField => ({ key: '', label: '', target: 'entity', entity_types: ['concept'], value_type: 'text', multiple: false, filterable: true, enabled: true, options: [], extract_instruction: '' });
 const blankSection = (order: number): KnowledgeSchemaNavigation => ({ id: '', label: '', entity_types: ['concept'], field_keys: [], order, enabled: true });
@@ -14,8 +15,13 @@ const CardKnowledgeSchema = () => {
   const [schema, setSchema] = useState<KnowledgeSchema | null>(null);
   const [saving, setSaving] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
-  const load = () => { if (kb_id) getKnowledgeSchema(kb_id).then(setSchema).catch(() => setSchema(null)); };
-  useEffect(load, [kb_id]);
+  const load = () => { if (canLoadKnowledgeSchema(kb_id)) getKnowledgeSchema(kb_id).then(setSchema).catch(() => setSchema(null)); };
+  useEffect(() => {
+    setSchema(null);
+    load();
+    // The current knowledge-base ID is the only value that should reload the schema.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kb_id]);
   if (!kb_id || !schema) return <Box p={3}>Loading knowledge model…</Box>;
   const updateField = (index: number, patch: Partial<KnowledgeSchemaField>) => setSchema(current => current && ({ ...current, fields: current.fields.map((field, i) => i === index ? { ...field, ...patch } : field) }));
   const updateSection = (index: number, patch: Partial<KnowledgeSchemaNavigation>) => setSchema(current => current && ({ ...current, navigation: current.navigation.map((section, i) => i === index ? { ...section, ...patch } : section) }));
@@ -28,7 +34,7 @@ const CardKnowledgeSchema = () => {
   return <Box p={3} maxWidth={980}>
     <Typography variant='h6'>Knowledge model</Typography>
     <Typography color='text.secondary' fontSize={14} mt={1} mb={3}>Server-defined fields guide LLM extraction and the desktop Knowledge navigation.</Typography>
-    <Stack gap={2}>{schema.fields.map((field, index) => <Box key={`${field.key}-${index}`} border='1px solid' borderColor='divider' borderRadius={1} p={2}>
+    <Stack gap={2}>{schema.fields.map((field, index) => <Box key={knowledgeSchemaFieldRenderKey(index)} border='1px solid' borderColor='divider' borderRadius={1} p={2}>
       <Stack direction='row' justifyContent='space-between' alignItems='center' mb={2}><Typography fontWeight={600}>Field {index + 1}</Typography><Button color='error' size='small' startIcon={<Delete />} onClick={() => setSchema(current => current && ({ ...current, fields: current.fields.filter((_, i) => i !== index) }))}>Remove</Button></Stack>
       <Stack direction='row' gap={2} flexWrap='wrap'>
         <TextField label='Key' value={field.key} onChange={event => updateField(index, { key: event.target.value })} helperText='lowercase_with_underscores' sx={{ minWidth: 180 }} />
