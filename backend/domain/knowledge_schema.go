@@ -221,6 +221,41 @@ func (s KnowledgeSchema) ValidateEntityAttributes(entityType GraphEntityType, at
 	return nil
 }
 
+// sanitizeEntityAttributes is deliberately stricter than a best-effort type
+// conversion: an attribute is retained only when the complete key/value entry
+// already meets the configured schema. This prevents model-invented fields or
+// invalid values from reaching graph persistence.
+func (s KnowledgeSchema) sanitizeEntityAttributes(entityType GraphEntityType, attributes GraphAttributes) (GraphAttributes, int) {
+	cleaned := make(GraphAttributes)
+	fields := make(map[string]KnowledgeField, len(s.Fields))
+	for _, field := range s.Fields {
+		if field.Enabled && (len(field.EntityTypes) == 0 || containsEntityType(field.EntityTypes, entityType)) {
+			fields[field.Key] = field
+		}
+	}
+	discarded := 0
+	for key, values := range attributes {
+		field, exists := fields[key]
+		if !exists || len(values) == 0 || len(values) > MaxKnowledgeAttributeValues || (!field.Multiple && len(values) > 1) {
+			discarded++
+			continue
+		}
+		valid := true
+		for _, value := range values {
+			if validateKnowledgeAttributeValue(field, value) != nil {
+				valid = false
+				break
+			}
+		}
+		if !valid {
+			discarded++
+			continue
+		}
+		cleaned[key] = values
+	}
+	return cleaned, discarded
+}
+
 func validKnowledgeValueType(value KnowledgeFieldValueType) bool {
 	switch value {
 	case KnowledgeFieldValueTypeText, KnowledgeFieldValueTypeNumber, KnowledgeFieldValueTypeDate, KnowledgeFieldValueTypeBoolean, KnowledgeFieldValueTypeSelect:

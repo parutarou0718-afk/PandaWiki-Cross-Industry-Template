@@ -232,10 +232,12 @@ func (u *LLMUsecase) ExtractGraphFacts(ctx context.Context, configuredModel *dom
 	if err != nil {
 		return domain.GraphExtraction{}, err
 	}
-	for _, entity := range extraction.Entities {
-		if err := knowledgeSchema.ValidateEntityAttributes(entity.Type, entity.Attributes); err != nil {
-			return domain.GraphExtraction{}, err
-		}
+	extraction, discarded, err := domain.SanitizeGraphExtraction(extraction, knowledgeSchema)
+	if err != nil {
+		return domain.GraphExtraction{}, err
+	}
+	if discarded > 0 {
+		u.logger.Warn("discarded invalid graph extraction facts", log.Int("discarded_count", discarded))
 	}
 	return extraction, nil
 }
@@ -259,7 +261,7 @@ func buildGraphExtractionPrompt(schema domain.KnowledgeSchema) string {
 	fieldJSON, _ := json.Marshal(fields)
 	return `Extract a compact knowledge graph from the document below. Return JSON only, with exactly this shape:
 {"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other","attributes":{"field_key":["value"]}}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
-Use only facts supported by the document. Keep evidence at most 512 characters. Attributes may contain only the enabled field definitions below. Every attribute value must be an array; omit unavailable fields. Do not include Markdown, explanations, document content outside evidence, or extra fields.
+Use only facts supported by the document. Keep evidence at most 512 characters. The enabled field list below is exhaustive: attributes may contain only those exact keys. If it is empty or a value is unavailable, return an empty attributes object. Never invent semantic keys such as "research". Every attribute value must be an array; omit unavailable fields. Do not include Markdown, explanations, document content outside evidence, or extra fields.
 Enabled field definitions: ` + string(fieldJSON)
 }
 
@@ -272,7 +274,7 @@ func parseGraphExtractionResponse(value string) (domain.GraphExtraction, error) 
 			value = value[:end]
 		}
 	}
-	return domain.ParseGraphExtraction(strings.TrimSpace(value))
+	return domain.DecodeGraphExtraction(strings.TrimSpace(value))
 }
 
 func truncateRunes(value string, limit int) string {

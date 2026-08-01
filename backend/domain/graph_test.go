@@ -60,3 +60,39 @@ func TestParseGraphExtractionRejectsMultipleJSONValues(t *testing.T) {
 	_, err := ParseGraphExtraction(`{"entities": [], "relations": []} {"entities": [], "relations": []}`)
 	require.ErrorIs(t, err, ErrInvalidGraphExtraction)
 }
+
+func TestSanitizeGraphExtractionKeepsValidFactsAndDropsSchemaViolations(t *testing.T) {
+	schema := KnowledgeSchema{Version: 1, Fields: []KnowledgeField{{
+		Key:                "argument",
+		Label:              "Argument",
+		Target:             KnowledgeFieldTargetEntity,
+		ValueType:          KnowledgeFieldValueTypeText,
+		Enabled:            true,
+		ExtractInstruction: "Extract explicit arguments only.",
+	}}}
+
+	cleaned, discarded, err := SanitizeGraphExtraction(GraphExtraction{
+		Entities: []GraphExtractedEntity{
+			{Name: "Valid concept", Type: GraphEntityTypeConcept, Attributes: GraphAttributes{"argument": {"supported claim"}, "research": {"invented"}}},
+			{Name: "Bad type", Type: "research"},
+		},
+		Relations: []GraphExtractedRelation{{
+			Source: "Valid concept", Target: "Source document", Type: GraphRelationTypeMentions, Confidence: 0.9, Evidence: "supported claim",
+		}},
+	}, schema)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, discarded)
+	require.Len(t, cleaned.Entities, 1)
+	require.Equal(t, GraphAttributes{"argument": {"supported claim"}}, cleaned.Entities[0].Attributes)
+	require.Len(t, cleaned.Relations, 1)
+	require.NoError(t, cleaned.Validate())
+}
+
+func TestSanitizeGraphExtractionRejectsModelOutputWithNoUsableFacts(t *testing.T) {
+	_, _, err := SanitizeGraphExtraction(GraphExtraction{
+		Entities: []GraphExtractedEntity{{Name: "Bad type", Type: "research"}},
+	}, DefaultKnowledgeSchema())
+
+	require.ErrorIs(t, err, ErrInvalidGraphExtraction)
+}

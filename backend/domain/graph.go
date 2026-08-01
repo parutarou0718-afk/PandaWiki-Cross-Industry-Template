@@ -127,6 +127,50 @@ func (e GraphExtraction) Validate() error {
 	return nil
 }
 
+// SanitizeGraphExtraction retains only graph facts that satisfy the server's
+// fixed graph contract and the active administrator-owned schema. It is for
+// untrusted model output only: callers must still reject malformed JSON before
+// reaching this function. Unknown attributes and malformed individual facts are
+// discarded rather than allowing one model mistake to discard a whole document.
+func SanitizeGraphExtraction(extraction GraphExtraction, schema KnowledgeSchema) (GraphExtraction, int, error) {
+	if err := schema.Validate(); err != nil {
+		return GraphExtraction{}, 0, err
+	}
+
+	cleaned := GraphExtraction{
+		Entities:  make([]GraphExtractedEntity, 0, len(extraction.Entities)),
+		Relations: make([]GraphExtractedRelation, 0, len(extraction.Relations)),
+	}
+	discarded := 0
+	for _, entity := range extraction.Entities {
+		if !validGraphEntityType(entity.Type) || !validGraphLabel(entity.Name) {
+			discarded++
+			continue
+		}
+		attributes, droppedAttributes := schema.sanitizeEntityAttributes(entity.Type, entity.Attributes)
+		discarded += droppedAttributes
+		cleaned.Entities = append(cleaned.Entities, GraphExtractedEntity{
+			Name:       entity.Name,
+			Type:       entity.Type,
+			Attributes: attributes,
+		})
+	}
+	for _, relation := range extraction.Relations {
+		if !validGraphRelationType(relation.Type) || !validGraphLabel(relation.Source) || !validGraphLabel(relation.Target) || relation.Confidence < 0 || relation.Confidence > 1 || utf8.RuneCountInString(relation.Evidence) > MaxGraphEvidenceLength {
+			discarded++
+			continue
+		}
+		cleaned.Relations = append(cleaned.Relations, relation)
+	}
+	if len(extraction.Entities)+len(extraction.Relations) > 0 && len(cleaned.Entities)+len(cleaned.Relations) == 0 {
+		return GraphExtraction{}, discarded, fmt.Errorf("%w: no usable facts", ErrInvalidGraphExtraction)
+	}
+	if err := cleaned.Validate(); err != nil {
+		return GraphExtraction{}, discarded, err
+	}
+	return cleaned, discarded, nil
+}
+
 func NormalizeGraphName(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
 }
@@ -134,6 +178,21 @@ func NormalizeGraphName(value string) string {
 // ParseGraphExtraction accepts only a single JSON object. Model-facing code may
 // remove a Markdown fence first, but no permissive fallback is allowed here.
 func ParseGraphExtraction(value string) (GraphExtraction, error) {
+	extraction, err := DecodeGraphExtraction(value)
+	if err != nil {
+		return GraphExtraction{}, err
+	}
+	if err := extraction.Validate(); err != nil {
+		return GraphExtraction{}, err
+	}
+	return extraction, nil
+}
+
+// DecodeGraphExtraction accepts a strict JSON graph envelope without applying
+// semantic validation. Model-facing code must sanitize it against the active
+// knowledge schema before persistence; trusted callers should use
+// ParseGraphExtraction instead.
+func DecodeGraphExtraction(value string) (GraphExtraction, error) {
 	var extraction GraphExtraction
 	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(value)))
 	decoder.DisallowUnknownFields()
@@ -143,9 +202,6 @@ func ParseGraphExtraction(value string) (GraphExtraction, error) {
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return GraphExtraction{}, fmt.Errorf("%w: multiple JSON values", ErrInvalidGraphExtraction)
-	}
-	if err := extraction.Validate(); err != nil {
-		return GraphExtraction{}, err
 	}
 	return extraction, nil
 }
