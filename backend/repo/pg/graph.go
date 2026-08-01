@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -163,9 +164,17 @@ func (r *GraphRepository) ensureRelation(tx *gorm.DB, kbID, sourceID, targetID s
 }
 
 type VisibleGraph struct {
-	Entities  []domain.GraphEntity   `json:"entities"`
+	Entities  []VisibleGraphEntity   `json:"entities"`
 	Relations []VisibleGraphRelation `json:"relations"`
 	Schema    domain.KnowledgeSchema `json:"schema"`
+}
+
+// VisibleGraphEntity is a response projection. Summary is deliberately not a
+// GraphEntity field because it is assembled only from source nodes visible to
+// the current caller.
+type VisibleGraphEntity struct {
+	domain.GraphEntity
+	Summary string `json:"summary,omitempty"`
 }
 
 type VisibleGraphRelation struct {
@@ -180,6 +189,12 @@ type VisibleGraphEvidence struct {
 	NodeID        string `json:"node_id"`
 	NodeReleaseID string `json:"node_release_id"`
 	Excerpt       string `json:"excerpt"`
+}
+
+type visibleGraphSummaryRow struct {
+	EntityID string `gorm:"column:entity_id"`
+	NodeID   string `gorm:"column:node_id"`
+	Summary  string `gorm:"column:summary"`
 }
 
 // GetVisibleGraph applies current node visit permissions in PostgreSQL. Group
@@ -199,21 +214,13 @@ func (r *GraphRepository) GetVisibleGraph(ctx context.Context, kbID string, auth
 		Joins("JOIN graph_relations r ON r.id = e.relation_id").
 		Joins("JOIN nodes n ON n.id = e.node_id AND n.kb_id = e.kb_id").
 		Where("e.kb_id = ?", kbID)
-
-	if len(authGroupIDs) == 0 {
-		query = query.Where("n.permissions->>'visitable' = ?", consts.NodeAccessPermOpen)
-	} else {
-		query = query.Where(`n.permissions->>'visitable' = ? OR (n.permissions->>'visitable' = ? AND EXISTS (
-			SELECT 1 FROM node_auth_groups nag
-			WHERE nag.node_id = n.id AND nag.perm = ? AND nag.auth_group_id IN ?
-		))`, consts.NodeAccessPermOpen, consts.NodeAccessPermPartial, consts.NodePermNameVisitable, authGroupIDs)
-	}
+	query = applyVisibleGraphNodePermissionFilter(query, authGroupIDs)
 
 	var rows []row
 	if err := query.Find(&rows).Error; err != nil {
 		return nil, err
 	}
-	result := &VisibleGraph{Entities: make([]domain.GraphEntity, 0), Relations: make([]VisibleGraphRelation, 0)}
+	result := &VisibleGraph{Entities: make([]VisibleGraphEntity, 0), Relations: make([]VisibleGraphRelation, 0)}
 	if len(rows) == 0 {
 		return result, nil
 	}
@@ -232,10 +239,83 @@ func (r *GraphRepository) GetVisibleGraph(ctx context.Context, kbID string, auth
 		result.Relations = append(result.Relations, *relation)
 	}
 	entityIDs = slices.Compact(entityIDs)
-	if err := r.db.WithContext(ctx).Where("id IN ?", entityIDs).Find(&result.Entities).Error; err != nil {
+	var entities []domain.GraphEntity
+	if err := r.db.WithContext(ctx).Where("id IN ?", entityIDs).Find(&entities).Error; err != nil {
 		return nil, err
 	}
+	summaryQuery := r.db.WithContext(ctx).Table("graph_entity_summaries s").
+		Select("s.entity_id, s.node_id, s.summary").
+		Joins("JOIN nodes n ON n.id = s.node_id AND n.kb_id = s.kb_id").
+		Where("s.kb_id = ? AND s.entity_id IN ?", kbID, entityIDs).
+		Order("s.entity_id ASC, s.node_id ASC")
+	summaryQuery = applyVisibleGraphNodePermissionFilter(summaryQuery, authGroupIDs)
+	var summaryRows []visibleGraphSummaryRow
+	if err := summaryQuery.Find(&summaryRows).Error; err != nil {
+		return nil, err
+	}
+	result.Entities = buildVisibleGraphEntities(entities, summaryRows)
 	return result, nil
+}
+
+// applyVisibleGraphNodePermissionFilter is shared by graph evidence and source
+// summaries so a summary can only be returned when its own node is visitable.
+func applyVisibleGraphNodePermissionFilter(query *gorm.DB, authGroupIDs []int) *gorm.DB {
+	if len(authGroupIDs) == 0 {
+		return query.Where("n.permissions->>'visitable' = ?", consts.NodeAccessPermOpen)
+	}
+	return query.Where(`n.permissions->>'visitable' = ? OR (n.permissions->>'visitable' = ? AND EXISTS (
+		SELECT 1 FROM node_auth_groups nag
+		WHERE nag.node_id = n.id AND nag.perm = ? AND nag.auth_group_id IN ?
+	))`, consts.NodeAccessPermOpen, consts.NodeAccessPermPartial, consts.NodePermNameVisitable, authGroupIDs)
+}
+
+func buildVisibleGraphEntities(entities []domain.GraphEntity, rows []visibleGraphSummaryRow) []VisibleGraphEntity {
+	orderedRows := append([]visibleGraphSummaryRow(nil), rows...)
+	sort.Slice(orderedRows, func(i, j int) bool {
+		if orderedRows[i].EntityID != orderedRows[j].EntityID {
+			return orderedRows[i].EntityID < orderedRows[j].EntityID
+		}
+		if orderedRows[i].NodeID != orderedRows[j].NodeID {
+			return orderedRows[i].NodeID < orderedRows[j].NodeID
+		}
+		return orderedRows[i].Summary < orderedRows[j].Summary
+	})
+
+	summariesByEntity := make(map[string][]string, len(entities))
+	seenByEntity := make(map[string]map[string]struct{}, len(entities))
+	for _, row := range orderedRows {
+		summary := strings.TrimSpace(row.Summary)
+		if summary == "" || len(summariesByEntity[row.EntityID]) == 3 {
+			continue
+		}
+		seen := seenByEntity[row.EntityID]
+		if seen == nil {
+			seen = make(map[string]struct{})
+			seenByEntity[row.EntityID] = seen
+		}
+		if _, exists := seen[summary]; exists {
+			continue
+		}
+		seen[summary] = struct{}{}
+		summariesByEntity[row.EntityID] = append(summariesByEntity[row.EntityID], summary)
+	}
+
+	result := make([]VisibleGraphEntity, 0, len(entities))
+	for _, entity := range entities {
+		result = append(result, VisibleGraphEntity{
+			GraphEntity: entity,
+			Summary:     truncateVisibleGraphSummary(strings.Join(summariesByEntity[entity.ID], "\n\n")),
+		})
+	}
+	return result
+}
+
+func truncateVisibleGraphSummary(summary string) string {
+	runes := []rune(summary)
+	if len(runes) <= domain.MaxGraphEntitySummaryLength {
+		return summary
+	}
+	return string(runes[:domain.MaxGraphEntitySummaryLength])
 }
 
 func newGraphID() string {

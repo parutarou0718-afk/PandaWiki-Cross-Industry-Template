@@ -260,8 +260,8 @@ func buildGraphExtractionPrompt(schema domain.KnowledgeSchema) string {
 	}
 	fieldJSON, _ := json.Marshal(fields)
 	return `Extract a compact knowledge graph from the document below. Return JSON only, with exactly this shape:
-{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other","attributes":{"field_key":["value"]}}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
-Use only facts supported by the document. Keep evidence at most 512 characters. The enabled field list below is exhaustive: attributes may contain only those exact keys. If it is empty or a value is unavailable, return an empty attributes object. Never invent semantic keys such as "research". Every attribute value must be an array; omit unavailable fields. Do not include Markdown, explanations, document content outside evidence, or extra fields.
+{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other","summary":"plain text","attributes":{"field_key":["value"]}}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
+Use only facts supported by the document. Keep evidence at most 512 characters. Each entity summary is optional, plain text, at most 600 characters, and describes only the entity in this document; summary may be omitted when unavailable. The enabled field list below is exhaustive: attributes may contain only those exact keys. If it is empty or a value is unavailable, return an empty attributes object. Never invent semantic keys such as "research". Every attribute value must be an array; omit unavailable fields. Do not include Markdown, explanations, document content outside evidence, or extra fields.
 Enabled field definitions: ` + string(fieldJSON)
 }
 
