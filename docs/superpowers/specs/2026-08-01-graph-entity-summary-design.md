@@ -25,14 +25,16 @@ Node graph extraction finishes
 
 ## Data Contract
 
-`GraphEntity` gains an optional `summary` text field. Its value is generated only from the entity's existing, server-authorized graph projection:
+The graph projection exposes an optional `summary` text field for every visible entity. To preserve source permissions, storage is not one global summary per entity: it stores a short precomputed summary per `(entity_id, node_id, node_release_id)`. At read time the server combines only rows whose source nodes pass the caller's existing visit-permission filter.
+
+Each stored source summary is generated only from the entity's existing, server-authorized graph projection:
 
 - entity name and type;
 - schema-approved attributes;
 - direct relation labels and adjacent entity names;
 - bounded evidence excerpts already associated with those relations.
 
-The field is optional. Existing entities and failed refreshes return an empty summary; clients must show a neutral `Summary unavailable` state rather than invent text.
+The field is optional. Existing entities and failed refreshes return an empty summary; clients must show a neutral `Summary unavailable` state rather than invent text. A globally aggregated summary is explicitly prohibited because it could disclose restricted-source facts to a user who can see only one public relationship.
 
 The graph API remains permission-filtered before serialization. It returns `summary` only alongside an entity that the caller may already receive. It never exposes an unbounded source node body, raw model prompt, model response trace, or another user's groups.
 
