@@ -37,3 +37,15 @@ The future `GraphProvider` consumes the endpoint above and renders entity and
 relation data. Selecting a source opens the already-existing node-detail route.
 It must not use local project paths or local graph-analysis code for a
 PandaWiki virtual project.
+
+## PostgreSQL repository integration tests
+
+The permission and summary-persistence repository tests use a disposable schema
+inside a real PostgreSQL database. They are excluded from normal `go test` runs
+and skip when neither `DATABASE_URL` nor `POSTGRES_DSN` is set.
+
+From `backend`, run them in PowerShell with:
+
+```powershell
+$env:DATABASE_URL='postgres://user:password@localhost:5432/pandawiki_test?sslmode=disable'; go test -tags=integration ./repo/pg -run 'TestGraphRepository' -count=1
+```

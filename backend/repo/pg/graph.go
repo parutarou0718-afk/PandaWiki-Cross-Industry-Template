@@ -22,19 +22,32 @@ type GraphRepository struct {
 	logger *log.Logger
 }
 
+type ReplaceNodeExtractionOptions struct {
+	// SummaryRefreshSucceeded means the separate summary model call completed
+	// with at least one usable source summary. The repository also verifies the
+	// extraction is non-empty before replacing prior rows.
+	SummaryRefreshSucceeded bool
+}
+
 func NewGraphRepository(db *storepg.DB, logger *log.Logger) *GraphRepository {
 	return &GraphRepository{db: db, logger: logger.WithModule("repo.pg.graph")}
 }
 
 // ReplaceNodeExtraction removes evidence derived from one node before inserting
 // fresh facts. It never removes a relation still evidenced by another node.
-func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeID, nodeReleaseID string, extraction domain.GraphExtraction) error {
+// Source summaries are replaced only when the extraction contains at least one
+// non-empty result from the separate summary refresh; an empty refresh keeps the
+// previous source summaries while graph facts and evidence still advance.
+func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeID, nodeReleaseID string, extraction domain.GraphExtraction, options ReplaceNodeExtractionOptions) error {
 	if err := extraction.Validate(); err != nil {
 		return err
 	}
+	replaceSummaries := shouldReplaceGraphEntitySummaries(options.SummaryRefreshSucceeded, extraction)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("kb_id = ? AND node_id = ?", kbID, nodeID).Delete(&domain.GraphEntitySummary{}).Error; err != nil {
-			return err
+		if replaceSummaries {
+			if err := tx.Where("kb_id = ? AND node_id = ?", kbID, nodeID).Delete(&domain.GraphEntitySummary{}).Error; err != nil {
+				return err
+			}
 		}
 		if err := tx.Where("kb_id = ? AND node_id = ?", kbID, nodeID).Delete(&domain.GraphEvidence{}).Error; err != nil {
 			return err
@@ -67,8 +80,10 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 			}
 			key := domain.NormalizeGraphName(entity.Name)
 			entities[key] = stored
-			if summary := strings.TrimSpace(entity.Summary); summary != "" {
-				summaries[stored.ID] = summary
+			if replaceSummaries {
+				if summary := strings.TrimSpace(entity.Summary); summary != "" {
+					summaries[stored.ID] = summary
+				}
 			}
 		}
 		for _, relation := range extraction.Relations {
@@ -133,6 +148,18 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 		}
 		return nil
 	})
+}
+
+func shouldReplaceGraphEntitySummaries(summaryRefreshSucceeded bool, extraction domain.GraphExtraction) bool {
+	if !summaryRefreshSucceeded {
+		return false
+	}
+	for _, entity := range extraction.Entities {
+		if strings.TrimSpace(entity.Summary) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *GraphRepository) ensureEntity(tx *gorm.DB, kbID, name string, entityType domain.GraphEntityType, attributes domain.GraphAttributes) (*domain.GraphEntity, error) {

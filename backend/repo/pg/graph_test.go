@@ -95,3 +95,18 @@ func TestBuildVisibleGraphEntitiesBoundsJoinedSourceSummaries(t *testing.T) {
 	require.Len(t, []rune(result[0].Summary), domain.MaxGraphEntitySummaryLength)
 	require.NotContains(t, result[0].Summary, "c")
 }
+
+func TestShouldReplaceGraphEntitySummariesRequiresSuccessfulNonEmptyRefreshResult(t *testing.T) {
+	require.False(t, shouldReplaceGraphEntitySummaries(false, domain.GraphExtraction{
+		Entities: []domain.GraphExtractedEntity{{Name: "PandaWiki", Type: domain.GraphEntityTypeOrganization, Summary: "Untrusted stale value."}},
+	}))
+	require.False(t, shouldReplaceGraphEntitySummaries(true, domain.GraphExtraction{
+		Entities: []domain.GraphExtractedEntity{{Name: "PandaWiki", Type: domain.GraphEntityTypeOrganization}},
+	}))
+	require.False(t, shouldReplaceGraphEntitySummaries(true, domain.GraphExtraction{
+		Entities: []domain.GraphExtractedEntity{{Name: "PandaWiki", Type: domain.GraphEntityTypeOrganization, Summary: "  "}},
+	}))
+	require.True(t, shouldReplaceGraphEntitySummaries(true, domain.GraphExtraction{
+		Entities: []domain.GraphExtractedEntity{{Name: "PandaWiki", Type: domain.GraphEntityTypeOrganization, Summary: "Fresh summary."}},
+	}))
+}
