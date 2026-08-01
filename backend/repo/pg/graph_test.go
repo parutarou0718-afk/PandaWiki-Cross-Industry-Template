@@ -4,9 +4,48 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chaitin/panda-wiki/consts"
 	"github.com/chaitin/panda-wiki/domain"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
+
+func TestBuildVisibleGraphSummaryQueryUsesOpenNodePermissionFilter(t *testing.T) {
+	db, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=localhost user=test dbname=test sslmode=disable"}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	require.NoError(t, err)
+
+	query := buildVisibleGraphSummaryQuery(db, "kb-1", []string{"entity-public", "entity-restricted"}, nil)
+	result := query.Find(&[]visibleGraphSummaryRow{})
+
+	require.NoError(t, result.Error)
+	sql := result.Statement.SQL.String()
+	require.Contains(t, sql, "graph_entity_summaries s")
+	require.Contains(t, sql, "JOIN nodes n ON n.id = s.node_id AND n.kb_id = s.kb_id")
+	require.Contains(t, sql, "n.permissions->>'visitable'")
+	require.NotContains(t, sql, "node_auth_groups")
+	require.Contains(t, result.Statement.Vars, consts.NodeAccessPermOpen)
+}
+
+func TestBuildVisibleGraphSummaryQueryUsesOpenOrAuthorizedPartialNodeFilter(t *testing.T) {
+	db, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=localhost user=test dbname=test sslmode=disable"}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	require.NoError(t, err)
+
+	query := buildVisibleGraphSummaryQuery(db, "kb-1", []string{"entity-public", "entity-restricted"}, []int{7, 11})
+	result := query.Find(&[]visibleGraphSummaryRow{})
+
+	require.NoError(t, result.Error)
+	sql := result.Statement.SQL.String()
+	require.Contains(t, sql, "graph_entity_summaries s")
+	require.Contains(t, sql, "n.permissions->>'visitable'")
+	require.Contains(t, sql, "node_auth_groups nag")
+	require.Contains(t, sql, "nag.node_id = n.id")
+	require.Contains(t, sql, "nag.auth_group_id IN")
+	require.Contains(t, result.Statement.Vars, consts.NodeAccessPermOpen)
+	require.Contains(t, result.Statement.Vars, consts.NodeAccessPermPartial)
+	require.Contains(t, result.Statement.Vars, 7)
+	require.Contains(t, result.Statement.Vars, 11)
+}
 
 func TestBuildVisibleGraphEntitiesUsesOnlyVisibleSourceSummaries(t *testing.T) {
 	entities := []domain.GraphEntity{{ID: "entity-1", Name: "PandaWiki", Type: domain.GraphEntityTypeOrganization}}

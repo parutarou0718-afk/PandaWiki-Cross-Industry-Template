@@ -44,6 +44,10 @@ const (
 	graphExtractionMaxRunes = 60000
 )
 
+const graphEntitySummaryPrompt = `Generate optional source-scoped summaries for entities in the sanitized knowledge-graph projection supplied by the user. Return JSON only, with exactly this shape:
+{"summaries":[{"name":"entity name","summary":"plain text"}]}
+Use only the supplied entity names, types, attributes, relation labels, adjacent entity names, and bounded evidence. Do not add facts, Markdown, explanations, or extra fields. Each summary must be at most 600 Unicode characters. Omit entities when no useful summary can be produced.`
+
 func NewLLMUsecase(config *config.Config, rag rag.RAGService, conversationRepo *pg.ConversationRepository, kbRepo *pg.KnowledgeBaseRepository, nodeRepo *pg.NodeRepository, modelRepo *pg.ModelRepository, promptRepo *pg.PromptRepo, logger *log.Logger) *LLMUsecase {
 	tiktoken.SetBpeLoader(&utils.Localloader{})
 	modelkit := modelkit.NewModelKit(logger.Logger)
@@ -242,6 +246,146 @@ func (u *LLMUsecase) ExtractGraphFacts(ctx context.Context, configuredModel *dom
 	return extraction, nil
 }
 
+// GenerateGraphEntitySummaries performs a separate model call after graph
+// extraction has been sanitized. Raw node content and titles are never inputs
+// to this call.
+func (u *LLMUsecase) GenerateGraphEntitySummaries(ctx context.Context, configuredModel *domain.Model, extraction domain.GraphExtraction, knowledgeSchema domain.KnowledgeSchema) (map[string]string, error) {
+	if err := extraction.Validate(); err != nil {
+		return nil, err
+	}
+	for _, entity := range extraction.Entities {
+		if err := knowledgeSchema.ValidateEntityAttributes(entity.Type, entity.Attributes); err != nil {
+			return nil, err
+		}
+	}
+	modelkitModel, err := configuredModel.ToModelkitModel()
+	if err != nil {
+		return nil, err
+	}
+	chatModel, err := u.modelkit.GetChatModel(ctx, modelkitModel)
+	if err != nil {
+		return nil, err
+	}
+	return u.requestGraphEntitySummaries(ctx, chatModel, extraction)
+}
+
+type graphEntitySummaryProjection struct {
+	Entities  []graphEntitySummaryProjectionEntity   `json:"entities"`
+	Relations []graphEntitySummaryProjectionRelation `json:"relations"`
+}
+
+type graphEntitySummaryProjectionEntity struct {
+	Name       string                 `json:"name"`
+	Type       domain.GraphEntityType `json:"type"`
+	Attributes domain.GraphAttributes `json:"attributes"`
+}
+
+type graphEntitySummaryProjectionRelation struct {
+	Source   string                   `json:"source"`
+	Target   string                   `json:"target"`
+	Type     domain.GraphRelationType `json:"type"`
+	Evidence string                   `json:"evidence"`
+}
+
+type graphEntitySummaryResponse struct {
+	Summaries []struct {
+		Name    string `json:"name"`
+		Summary string `json:"summary"`
+	} `json:"summaries"`
+}
+
+func (u *LLMUsecase) requestGraphEntitySummaries(ctx context.Context, chatModel model.BaseChatModel, extraction domain.GraphExtraction) (map[string]string, error) {
+	projection := graphEntitySummaryProjection{
+		Entities:  make([]graphEntitySummaryProjectionEntity, 0, len(extraction.Entities)),
+		Relations: make([]graphEntitySummaryProjectionRelation, 0, len(extraction.Relations)),
+	}
+	for _, entity := range extraction.Entities {
+		attributes := entity.Attributes
+		if attributes == nil {
+			attributes = domain.GraphAttributes{}
+		}
+		projection.Entities = append(projection.Entities, graphEntitySummaryProjectionEntity{
+			Name: entity.Name, Type: entity.Type, Attributes: attributes,
+		})
+	}
+	for _, relation := range extraction.Relations {
+		projection.Relations = append(projection.Relations, graphEntitySummaryProjectionRelation{
+			Source: relation.Source, Target: relation.Target, Type: relation.Type, Evidence: truncateRunes(strings.TrimSpace(relation.Evidence), domain.MaxGraphEvidenceLength),
+		})
+	}
+	input, err := json.Marshal(projection)
+	if err != nil {
+		return nil, err
+	}
+	result, err := u.Generate(ctx, chatModel, []*schema.Message{
+		schema.SystemMessage(graphEntitySummaryPrompt),
+		schema.UserMessage(string(input)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return parseGraphEntitySummaryResponse(result, extraction)
+}
+
+func parseGraphEntitySummaryResponse(value string, extraction domain.GraphExtraction) (map[string]string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("empty graph entity summary response")
+	}
+	if strings.HasPrefix(value, "```") {
+		value = strings.TrimPrefix(value, "```json")
+		value = strings.TrimPrefix(value, "```")
+		if end := strings.LastIndex(value, "```"); end >= 0 {
+			value = value[:end]
+		}
+	}
+	var response graphEntitySummaryResponse
+	decoder := json.NewDecoder(strings.NewReader(strings.TrimSpace(value)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&response); err != nil {
+		return nil, fmt.Errorf("decode graph entity summaries: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, errors.New("decode graph entity summaries: multiple JSON values")
+	}
+	knownNames := make(map[string]struct{}, len(extraction.Entities))
+	for _, entity := range extraction.Entities {
+		knownNames[domain.NormalizeGraphName(entity.Name)] = struct{}{}
+	}
+	summaries := make(map[string]string, len(response.Summaries))
+	for _, item := range response.Summaries {
+		nameKey := domain.NormalizeGraphName(item.Name)
+		if _, ok := knownNames[nameKey]; !ok {
+			continue
+		}
+		summary := strings.TrimSpace(item.Summary)
+		if summary == "" {
+			continue
+		}
+		if _, exists := summaries[nameKey]; exists {
+			continue
+		}
+		summaries[nameKey] = truncateRunes(summary, domain.MaxGraphEntitySummaryLength)
+	}
+	return summaries, nil
+}
+
+func attachGraphEntitySummaries(extraction domain.GraphExtraction, summaries map[string]string) domain.GraphExtraction {
+	if len(summaries) == 0 {
+		return extraction
+	}
+	result := extraction
+	result.Entities = append([]domain.GraphExtractedEntity(nil), extraction.Entities...)
+	for i := range result.Entities {
+		summary := strings.TrimSpace(summaries[domain.NormalizeGraphName(result.Entities[i].Name)])
+		if summary != "" {
+			result.Entities[i].Summary = truncateRunes(summary, domain.MaxGraphEntitySummaryLength)
+		}
+	}
+	return result
+}
+
 func buildGraphExtractionPrompt(schema domain.KnowledgeSchema) string {
 	type fieldProjection struct {
 		Key         string                         `json:"key"`
@@ -260,8 +404,8 @@ func buildGraphExtractionPrompt(schema domain.KnowledgeSchema) string {
 	}
 	fieldJSON, _ := json.Marshal(fields)
 	return `Extract a compact knowledge graph from the document below. Return JSON only, with exactly this shape:
-{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other","summary":"plain text","attributes":{"field_key":["value"]}}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
-Use only facts supported by the document. Keep evidence at most 512 characters. Each entity summary is optional, plain text, at most 600 characters, and describes only the entity in this document; summary may be omitted when unavailable. The enabled field list below is exhaustive: attributes may contain only those exact keys. If it is empty or a value is unavailable, return an empty attributes object. Never invent semantic keys such as "research". Every attribute value must be an array; omit unavailable fields. Do not include Markdown, explanations, document content outside evidence, or extra fields.
+{"entities":[{"name":"string","type":"person|organization|concept|method|event|document|other","attributes":{"field_key":["value"]}}],"relations":[{"source":"string","target":"string","type":"mentions|related_to|part_of|causes|contradicts|cites","confidence":0.0,"evidence":"short source excerpt"}]}
+Use only facts supported by the document. Keep evidence at most 512 characters. The enabled field list below is exhaustive: attributes may contain only those exact keys. If it is empty or a value is unavailable, return an empty attributes object. Never invent semantic keys such as "research". Every attribute value must be an array; omit unavailable fields. Do not include summaries, Markdown, explanations, document content outside evidence, or extra fields.
 Enabled field definitions: ` + string(fieldJSON)
 }
 
@@ -274,7 +418,16 @@ func parseGraphExtractionResponse(value string) (domain.GraphExtraction, error) 
 			value = value[:end]
 		}
 	}
-	return domain.DecodeGraphExtraction(strings.TrimSpace(value))
+	extraction, err := domain.DecodeGraphExtraction(strings.TrimSpace(value))
+	if err != nil {
+		return domain.GraphExtraction{}, err
+	}
+	// Summaries from the raw-document call are never trusted or persisted. Only
+	// the separate sanitized-projection call may populate this field.
+	for i := range extraction.Entities {
+		extraction.Entities[i].Summary = ""
+	}
+	return extraction, nil
 }
 
 func truncateRunes(value string, limit int) string {

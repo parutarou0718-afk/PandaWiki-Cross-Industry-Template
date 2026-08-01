@@ -90,6 +90,12 @@ func (u *GraphUsecase) RefreshNode(ctx context.Context, kbID, nodeReleaseID stri
 	if err != nil {
 		return fmt.Errorf("extract graph facts: %w", err)
 	}
+	summaries, summaryErr := u.llm.GenerateGraphEntitySummaries(ctx, chatModel, extraction, schema)
+	if summaryErr != nil {
+		u.logger.Warn("graph entity summary generation failed", log.String("kb_id", kbID), log.String("node_id", nodeRelease.NodeID), log.Int("entity_count", len(extraction.Entities)))
+	} else {
+		extraction = attachGraphEntitySummaries(extraction, summaries)
+	}
 	if err := u.graphRepo.ReplaceNodeExtraction(ctx, kbID, nodeRelease.NodeID, nodeRelease.ID, extraction); err != nil {
 		return fmt.Errorf("store graph facts: %w", err)
 	}

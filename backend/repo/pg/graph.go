@@ -243,18 +243,22 @@ func (r *GraphRepository) GetVisibleGraph(ctx context.Context, kbID string, auth
 	if err := r.db.WithContext(ctx).Where("id IN ?", entityIDs).Find(&entities).Error; err != nil {
 		return nil, err
 	}
-	summaryQuery := r.db.WithContext(ctx).Table("graph_entity_summaries s").
-		Select("s.entity_id, s.node_id, s.summary").
-		Joins("JOIN nodes n ON n.id = s.node_id AND n.kb_id = s.kb_id").
-		Where("s.kb_id = ? AND s.entity_id IN ?", kbID, entityIDs).
-		Order("s.entity_id ASC, s.node_id ASC")
-	summaryQuery = applyVisibleGraphNodePermissionFilter(summaryQuery, authGroupIDs)
+	summaryQuery := buildVisibleGraphSummaryQuery(r.db.WithContext(ctx), kbID, entityIDs, authGroupIDs)
 	var summaryRows []visibleGraphSummaryRow
 	if err := summaryQuery.Find(&summaryRows).Error; err != nil {
 		return nil, err
 	}
 	result.Entities = buildVisibleGraphEntities(entities, summaryRows)
 	return result, nil
+}
+
+func buildVisibleGraphSummaryQuery(db *gorm.DB, kbID string, entityIDs []string, authGroupIDs []int) *gorm.DB {
+	query := db.Table("graph_entity_summaries s").
+		Select("s.entity_id, s.node_id, s.summary").
+		Joins("JOIN nodes n ON n.id = s.node_id AND n.kb_id = s.kb_id").
+		Where("s.kb_id = ? AND s.entity_id IN ?", kbID, entityIDs).
+		Order("s.entity_id ASC, s.node_id ASC")
+	return applyVisibleGraphNodePermissionFilter(query, authGroupIDs)
 }
 
 // applyVisibleGraphNodePermissionFilter is shared by graph evidence and source
