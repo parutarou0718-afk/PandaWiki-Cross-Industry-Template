@@ -22,7 +22,7 @@ func TestBuildVisiblePluginRecordQueryFiltersByOwnerKnowledgeBaseOrAuthorizedGro
 	require.Contains(t, sql, "knowledge_base_plugin_records")
 	require.Contains(t, sql, "owner_user_id")
 	require.Contains(t, sql, "visibility")
-	require.Contains(t, sql, "shared_auth_group_ids &&")
+	require.Contains(t, sql, "shared_group_ids &&")
 	require.Contains(t, result.Statement.Vars, "kb-1")
 	require.Contains(t, result.Statement.Vars, "official.submission-management")
 	require.Contains(t, result.Statement.Vars, "submission")

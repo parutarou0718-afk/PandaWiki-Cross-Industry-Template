@@ -9,24 +9,25 @@ import (
 )
 
 type APIHandlers struct {
-	UserHandler            *UserHandler
-	KnowledgeBaseHandler   *KnowledgeBaseHandler
-	NodeHandler            *NodeHandler
-	AppHandler             *AppHandler
-	FileHandler            *FileHandler
-	ModelHandler           *ModelHandler
-	ConversationHandler    *ConversationHandler
-	CrawlerHandler         *CrawlerHandler
-	CreationHandler        *CreationHandler
-	StatHandler            *StatHandler
-	CommentHandler         *CommentHandler
-	AuthV1Handler          *AuthV1Handler
-	NavHandler             *NavHandler
-	KnowledgeSearchHandler *KnowledgeSearchHandler
-	GraphHandler           *GraphHandler
-	APITokenHandler        *APITokenHandler
-	PluginRecordHandler    *PluginRecordHandler
-	LicenseHandler         *LicenseHandler
+	UserHandler              *UserHandler
+	KnowledgeBaseHandler     *KnowledgeBaseHandler
+	NodeHandler              *NodeHandler
+	AppHandler               *AppHandler
+	FileHandler              *FileHandler
+	ModelHandler             *ModelHandler
+	ConversationHandler      *ConversationHandler
+	CrawlerHandler           *CrawlerHandler
+	CreationHandler          *CreationHandler
+	StatHandler              *StatHandler
+	CommentHandler           *CommentHandler
+	AuthV1Handler            *AuthV1Handler
+	NavHandler               *NavHandler
+	KnowledgeSearchHandler   *KnowledgeSearchHandler
+	GraphHandler             *GraphHandler
+	APITokenHandler          *APITokenHandler
+	PluginRecordHandler      *PluginRecordHandler
+	PluginRecordGroupHandler *PluginRecordGroupHandler
+	LicenseHandler           *LicenseHandler
 }
 
 var ProviderSet = wire.NewSet(
@@ -51,6 +52,7 @@ var ProviderSet = wire.NewSet(
 	NewGraphHandler,
 	NewAPITokenHandler,
 	NewPluginRecordHandler,
+	NewPluginRecordGroupHandler,
 	NewLicenseHandler,
 
 	wire.Struct(new(APIHandlers), "*"),

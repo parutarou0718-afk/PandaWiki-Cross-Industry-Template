@@ -72,27 +72,27 @@ func (p *PluginRecordPayload) Scan(value any) error {
 
 type PluginRecordAccess struct {
 	Visibility             PluginRecordVisibility `json:"visibility" gorm:"column:visibility;not null"`
-	SharedAuthGroupIDs     pq.Int64Array          `json:"shared_auth_group_ids" gorm:"column:shared_auth_group_ids;type:bigint[];not null;default:'{}'"`
+	SharedGroupIDs         pq.Int64Array          `json:"shared_group_ids" gorm:"column:shared_group_ids;type:bigint[];not null;default:'{}'"`
 	AllowCollaborativeEdit bool                   `json:"allow_collaborative_edit" gorm:"column:allow_collaborative_edit;not null;default:false"`
 }
 
 func (a PluginRecordAccess) Validate() error {
 	switch a.Visibility {
 	case PluginRecordVisibilityPrivate, PluginRecordVisibilityKnowledgeBase:
-		if len(a.SharedAuthGroupIDs) != 0 {
+		if len(a.SharedGroupIDs) != 0 {
 			return fmt.Errorf("%s plugin record cannot declare shared groups", a.Visibility)
 		}
 	case PluginRecordVisibilityGroups:
-		if len(a.SharedAuthGroupIDs) == 0 {
+		if len(a.SharedGroupIDs) == 0 {
 			return fmt.Errorf("group shared plugin record requires at least one group")
 		}
-		seen := make(map[int64]struct{}, len(a.SharedAuthGroupIDs))
-		for _, groupID := range a.SharedAuthGroupIDs {
+		seen := make(map[int64]struct{}, len(a.SharedGroupIDs))
+		for _, groupID := range a.SharedGroupIDs {
 			if groupID <= 0 {
-				return fmt.Errorf("invalid shared auth group")
+				return fmt.Errorf("invalid shared plugin group")
 			}
 			if _, exists := seen[groupID]; exists {
-				return fmt.Errorf("duplicate shared auth group")
+				return fmt.Errorf("duplicate shared plugin group")
 			}
 			seen[groupID] = struct{}{}
 		}
@@ -135,7 +135,7 @@ func (r PluginRecord) IsVisibleTo(authUserID string, authGroupIDs []int) bool {
 	case PluginRecordVisibilityKnowledgeBase:
 		return true
 	case PluginRecordVisibilityGroups:
-		return slices.ContainsFunc(r.Access.SharedAuthGroupIDs, func(sharedID int64) bool {
+		return slices.ContainsFunc(r.Access.SharedGroupIDs, func(sharedID int64) bool {
 			return slices.Contains(authGroupIDs, int(sharedID))
 		})
 	default:

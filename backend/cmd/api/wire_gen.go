@@ -150,28 +150,31 @@ func createApp() (*App, error) {
 	graphHandler := v1.NewGraphHandler(echo, baseHandler, authMiddleware, graphUsecase)
 	apiTokenHandler := v1.NewAPITokenHandler(echo, baseHandler, authMiddleware, apiTokenRepo)
 	pluginRecordRepository := pg2.NewPluginRecordRepository(db, logger)
-	pluginRecordUsecase := usecase.NewPluginRecordUsecase(pluginRecordRepository, authRepo, userAccessRepository, logger)
+	pluginRecordGroupRepository := pg2.NewPluginRecordGroupRepository(db, logger)
+	pluginRecordUsecase := usecase.NewPluginRecordUsecase(pluginRecordRepository, pluginRecordGroupRepository, userAccessRepository, logger)
 	pluginRecordHandler := v1.NewPluginRecordHandler(echo, baseHandler, authMiddleware, pluginRecordUsecase)
+	pluginRecordGroupHandler := v1.NewPluginRecordGroupHandler(echo, baseHandler, authMiddleware, pluginRecordUsecase)
 	licenseHandler := v1.NewLicenseHandler(echo, baseHandler)
 	apiHandlers := &v1.APIHandlers{
-		UserHandler:            userHandler,
-		KnowledgeBaseHandler:   knowledgeBaseHandler,
-		NodeHandler:            nodeHandler,
-		AppHandler:             appHandler,
-		FileHandler:            fileHandler,
-		ModelHandler:           modelHandler,
-		ConversationHandler:    conversationHandler,
-		CrawlerHandler:         crawlerHandler,
-		CreationHandler:        creationHandler,
-		StatHandler:            statHandler,
-		CommentHandler:         commentHandler,
-		AuthV1Handler:          authV1Handler,
-		NavHandler:             navHandler,
-		KnowledgeSearchHandler: knowledgeSearchHandler,
-		GraphHandler:           graphHandler,
-		APITokenHandler:        apiTokenHandler,
-		PluginRecordHandler:    pluginRecordHandler,
-		LicenseHandler:         licenseHandler,
+		UserHandler:              userHandler,
+		KnowledgeBaseHandler:     knowledgeBaseHandler,
+		NodeHandler:              nodeHandler,
+		AppHandler:               appHandler,
+		FileHandler:              fileHandler,
+		ModelHandler:             modelHandler,
+		ConversationHandler:      conversationHandler,
+		CrawlerHandler:           crawlerHandler,
+		CreationHandler:          creationHandler,
+		StatHandler:              statHandler,
+		CommentHandler:           commentHandler,
+		AuthV1Handler:            authV1Handler,
+		NavHandler:               navHandler,
+		KnowledgeSearchHandler:   knowledgeSearchHandler,
+		GraphHandler:             graphHandler,
+		APITokenHandler:          apiTokenHandler,
+		PluginRecordHandler:      pluginRecordHandler,
+		PluginRecordGroupHandler: pluginRecordGroupHandler,
+		LicenseHandler:           licenseHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)
 	shareNavHandler := share.NewShareNavHandler(baseHandler, echo, navUsecase, logger)

@@ -9,13 +9,13 @@ import (
 )
 
 func TestDecodePluginRecordWriteRejectsUnknownFieldsAndNonObjectPayload(t *testing.T) {
-	valid := `{"kb_id":"kb-1","plugin_id":"official.submission-management","record_type":"submission","payload":{"paper_title":"Draft"},"access":{"visibility":"private","shared_auth_group_ids":[],"allow_collaborative_edit":false}}`
+	valid := `{"kb_id":"kb-1","plugin_id":"official.submission-management","record_type":"submission","payload":{"paper_title":"Draft"},"access":{"visibility":"private","shared_group_ids":[],"allow_collaborative_edit":false}}`
 
 	decoded, err := decodePluginRecordWrite(strings.NewReader(valid))
 	require.NoError(t, err)
 	require.Equal(t, domain.PluginRecordVisibilityPrivate, decoded.Access.Visibility)
 
-	_, err = decodePluginRecordWrite(strings.NewReader(`{"kb_id":"kb-1","plugin_id":"official.submission-management","record_type":"submission","payload":[],"access":{"visibility":"private","shared_auth_group_ids":[],"allow_collaborative_edit":false}}`))
+	_, err = decodePluginRecordWrite(strings.NewReader(`{"kb_id":"kb-1","plugin_id":"official.submission-management","record_type":"submission","payload":[],"access":{"visibility":"private","shared_group_ids":[],"allow_collaborative_edit":false}}`))
 	require.Error(t, err)
 
 	_, err = decodePluginRecordWrite(strings.NewReader(valid[:len(valid)-1] + `,"owner_user_id":"attacker"}`))

@@ -15,8 +15,8 @@ func TestPluginRecordAccessValidation(t *testing.T) {
 		{name: "private record has no groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityPrivate}},
 		{name: "knowledge base record has no groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityKnowledgeBase}},
 		{name: "group record requires groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityGroups}, wantErr: true},
-		{name: "private record cannot include groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityPrivate, SharedAuthGroupIDs: []int64{7}}, wantErr: true},
-		{name: "group record permits groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityGroups, SharedAuthGroupIDs: []int64{7, 9}}},
+		{name: "private record cannot include groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityPrivate, SharedGroupIDs: []int64{7}}, wantErr: true},
+		{name: "group record permits groups", access: PluginRecordAccess{Visibility: PluginRecordVisibilityGroups, SharedGroupIDs: []int64{7, 9}}},
 	}
 
 	for _, test := range tests {
@@ -47,7 +47,7 @@ func TestPluginRecordPayloadRejectsNonObjectJSON(t *testing.T) {
 
 func TestPluginRecordVisibilityAndEditPolicy(t *testing.T) {
 	private := PluginRecord{OwnerUserID: "user-1", Access: PluginRecordAccess{Visibility: PluginRecordVisibilityPrivate}}
-	groups := PluginRecord{OwnerUserID: "user-1", Access: PluginRecordAccess{Visibility: PluginRecordVisibilityGroups, SharedAuthGroupIDs: []int64{9}, AllowCollaborativeEdit: true}}
+	groups := PluginRecord{OwnerUserID: "user-1", Access: PluginRecordAccess{Visibility: PluginRecordVisibilityGroups, SharedGroupIDs: []int64{9}, AllowCollaborativeEdit: true}}
 	kb := PluginRecord{OwnerUserID: "user-1", Access: PluginRecordAccess{Visibility: PluginRecordVisibilityKnowledgeBase}}
 
 	require.True(t, private.IsVisibleTo("user-1", nil))

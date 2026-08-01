@@ -27,19 +27,19 @@ func NewPluginRecordRepository(db *storepg.DB, logger *log.Logger) *PluginRecord
 	return &PluginRecordRepository{db: db, logger: logger.WithModule("repo.pg.plugin_record")}
 }
 
-func buildVisiblePluginRecordQuery(db *gorm.DB, kbID, pluginID, recordType, authUserID string, authGroupIDs []int) *gorm.DB {
+func buildVisiblePluginRecordQuery(db *gorm.DB, kbID, pluginID, recordType, authUserID string, groupIDsForUser []int) *gorm.DB {
 	query := db.Model(&domain.PluginRecord{}).
 		Where("kb_id = ? AND plugin_id = ? AND record_type = ?", kbID, pluginID, recordType)
-	if len(authGroupIDs) == 0 {
+	if len(groupIDsForUser) == 0 {
 		return query.Where("owner_user_id = ? OR visibility = ?", authUserID, domain.PluginRecordVisibilityKnowledgeBase)
 	}
-	groupIDs := make([]int64, 0, len(authGroupIDs))
-	for _, groupID := range authGroupIDs {
+	groupIDs := make([]int64, 0, len(groupIDsForUser))
+	for _, groupID := range groupIDsForUser {
 		groupIDs = append(groupIDs, int64(groupID))
 	}
 	return query.Where(`owner_user_id = ?
 		OR visibility = ?
-		OR (visibility = ? AND shared_auth_group_ids && ?::bigint[])`,
+		OR (visibility = ? AND shared_group_ids && ?::bigint[])`,
 		authUserID,
 		domain.PluginRecordVisibilityKnowledgeBase,
 		domain.PluginRecordVisibilityGroups,
@@ -102,7 +102,7 @@ func (r *PluginRecordRepository) Update(ctx context.Context, record *domain.Plug
 		Updates(map[string]any{
 			"payload":                  record.Payload,
 			"visibility":               record.Access.Visibility,
-			"shared_auth_group_ids":    record.Access.SharedAuthGroupIDs,
+			"shared_group_ids":         record.Access.SharedGroupIDs,
 			"allow_collaborative_edit": record.Access.AllowCollaborativeEdit,
 		})
 	if result.Error != nil {

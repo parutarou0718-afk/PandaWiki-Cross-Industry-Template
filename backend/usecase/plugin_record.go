@@ -15,13 +15,13 @@ import (
 
 type PluginRecordUsecase struct {
 	records    *pg.PluginRecordRepository
-	authRepo   *pg.AuthRepo
+	groups     *pg.PluginRecordGroupRepository
 	accessRepo *pg.UserAccessRepository
 	logger     *log.Logger
 }
 
-func NewPluginRecordUsecase(records *pg.PluginRecordRepository, authRepo *pg.AuthRepo, accessRepo *pg.UserAccessRepository, logger *log.Logger) *PluginRecordUsecase {
-	return &PluginRecordUsecase{records: records, authRepo: authRepo, accessRepo: accessRepo, logger: logger.WithModule("usecase.plugin_record")}
+func NewPluginRecordUsecase(records *pg.PluginRecordRepository, groups *pg.PluginRecordGroupRepository, accessRepo *pg.UserAccessRepository, logger *log.Logger) *PluginRecordUsecase {
+	return &PluginRecordUsecase{records: records, groups: groups, accessRepo: accessRepo, logger: logger.WithModule("usecase.plugin_record")}
 }
 
 type PluginRecordWrite struct {
@@ -30,6 +30,43 @@ type PluginRecordWrite struct {
 	RecordType string
 	Payload    domain.PluginRecordPayload
 	Access     domain.PluginRecordAccess
+}
+
+type PluginRecordGroupWrite struct {
+	KBID          string
+	Name          string
+	MemberUserIDs []string
+}
+
+func (u *PluginRecordUsecase) ListGroups(ctx context.Context, kbID string) ([]domain.PluginRecordGroup, error) {
+	userID, _, err := u.viewer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	controller, err := u.isKnowledgeBaseController(ctx, kbID, userID)
+	if err != nil {
+		return nil, err
+	}
+	return u.groups.ListForUser(ctx, kbID, userID, controller)
+}
+
+func (u *PluginRecordUsecase) CreateGroup(ctx context.Context, input PluginRecordGroupWrite) (*domain.PluginRecordGroup, error) {
+	userID, _, err := u.viewer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	controller, err := u.isKnowledgeBaseController(ctx, input.KBID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !controller {
+		return nil, domain.ErrPermissionDenied
+	}
+	group := &domain.PluginRecordGroup{KBID: strings.TrimSpace(input.KBID), Name: strings.TrimSpace(input.Name), MemberUserIDs: input.MemberUserIDs, CreatedBy: userID}
+	if err := u.groups.Create(ctx, group); err != nil {
+		return nil, err
+	}
+	return group, nil
 }
 
 func (u *PluginRecordUsecase) List(ctx context.Context, kbID, pluginID, recordType string) ([]domain.PluginRecord, error) {
@@ -133,7 +170,7 @@ func (u *PluginRecordUsecase) validateWrite(ctx context.Context, record *domain.
 		return err
 	}
 	if record.Access.Visibility == domain.PluginRecordVisibilityGroups {
-		return u.authRepo.ValidateAuthGroupsBelongToKnowledgeBase(ctx, record.KBID, record.Access.SharedAuthGroupIDs)
+		return u.groups.ValidateIDsBelongToKnowledgeBase(ctx, record.KBID, record.Access.SharedGroupIDs)
 	}
 	return nil
 }
@@ -143,10 +180,11 @@ func (u *PluginRecordUsecase) viewer(ctx context.Context) (string, []int, error)
 	if auth == nil || strings.TrimSpace(auth.UserId) == "" {
 		return "", nil, fmt.Errorf("authenticated user is required")
 	}
-	// Auth groups are associated with PandaWiki's portal identities. A regular
-	// JWT user has no fabricated group membership; it can still use private and
-	// knowledge-base-shared records normally.
-	return auth.UserId, nil, nil
+	groupIDs, err := u.groups.ListIDsForUser(ctx, auth.UserId)
+	if err != nil {
+		return "", nil, err
+	}
+	return auth.UserId, groupIDs, nil
 }
 
 func (u *PluginRecordUsecase) isKnowledgeBaseController(ctx context.Context, kbID, userID string) (bool, error) {
