@@ -149,6 +149,9 @@ func createApp() (*App, error) {
 	graphUsecase := usecase.NewGraphUsecase(graphRepository, knowledgeSchemaRepository, nodeRepository, authRepo, llmUsecase, modelUsecase, ragRepository, logger)
 	graphHandler := v1.NewGraphHandler(echo, baseHandler, authMiddleware, graphUsecase)
 	apiTokenHandler := v1.NewAPITokenHandler(echo, baseHandler, authMiddleware, apiTokenRepo)
+	pluginRecordRepository := pg2.NewPluginRecordRepository(db, logger)
+	pluginRecordUsecase := usecase.NewPluginRecordUsecase(pluginRecordRepository, authRepo, userAccessRepository, logger)
+	pluginRecordHandler := v1.NewPluginRecordHandler(echo, baseHandler, authMiddleware, pluginRecordUsecase)
 	licenseHandler := v1.NewLicenseHandler(echo, baseHandler)
 	apiHandlers := &v1.APIHandlers{
 		UserHandler:            userHandler,
@@ -167,6 +170,7 @@ func createApp() (*App, error) {
 		KnowledgeSearchHandler: knowledgeSearchHandler,
 		GraphHandler:           graphHandler,
 		APITokenHandler:        apiTokenHandler,
+		PluginRecordHandler:    pluginRecordHandler,
 		LicenseHandler:         licenseHandler,
 	}
 	shareNodeHandler := share.NewShareNodeHandler(baseHandler, echo, nodeUsecase, logger)

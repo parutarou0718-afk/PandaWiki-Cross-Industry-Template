@@ -37,4 +37,5 @@ var ProviderSet = wire.NewSet(
 	NewAuthUsecase,
 	NewNavUsecase,
 	NewGraphUsecase,
+	NewPluginRecordUsecase,
 )

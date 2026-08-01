@@ -28,4 +28,5 @@ var ProviderSet = wire.NewSet(
 	NewNavRepository,
 	NewGraphRepository,
 	NewKnowledgeSchemaRepository,
+	NewPluginRecordRepository,
 )

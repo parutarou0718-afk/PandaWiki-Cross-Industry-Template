@@ -174,6 +174,24 @@ func (r *AuthRepo) GetAuthGroupIdsWithParentsByAuthId(ctx context.Context, authI
 	return result, nil
 }
 
+// ValidateAuthGroupsBelongToKnowledgeBase prevents a caller from attaching a
+// record in one knowledge base to a group from another knowledge base.
+func (r *AuthRepo) ValidateAuthGroupsBelongToKnowledgeBase(ctx context.Context, kbID string, groupIDs []int64) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&domain.AuthGroup{}).
+		Where("kb_id = ? AND id IN ?", kbID, groupIDs).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count != int64(len(groupIDs)) {
+		return fmt.Errorf("one or more shared groups do not belong to this knowledge base")
+	}
+	return nil
+}
+
 func (r *AuthRepo) GetAuthBySourceType(ctx context.Context, sourceType consts.SourceType) (*domain.Auth, error) {
 	var auth *domain.Auth
 	if err := r.db.WithContext(ctx).Model(&domain.Auth{}).Where("source_type = ?", string(sourceType)).First(&auth).Error; err != nil {

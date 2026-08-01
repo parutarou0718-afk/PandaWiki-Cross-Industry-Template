@@ -25,6 +25,7 @@ type APIHandlers struct {
 	KnowledgeSearchHandler *KnowledgeSearchHandler
 	GraphHandler           *GraphHandler
 	APITokenHandler        *APITokenHandler
+	PluginRecordHandler    *PluginRecordHandler
 	LicenseHandler         *LicenseHandler
 }
 
@@ -49,6 +50,7 @@ var ProviderSet = wire.NewSet(
 	NewKnowledgeSearchHandler,
 	NewGraphHandler,
 	NewAPITokenHandler,
+	NewPluginRecordHandler,
 	NewLicenseHandler,
 
 	wire.Struct(new(APIHandlers), "*"),
