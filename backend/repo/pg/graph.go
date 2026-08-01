@@ -32,6 +32,9 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 		return err
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("kb_id = ? AND node_id = ?", kbID, nodeID).Delete(&domain.GraphEntitySummary{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("kb_id = ? AND node_id = ?", kbID, nodeID).Delete(&domain.GraphEvidence{}).Error; err != nil {
 			return err
 		}
@@ -55,12 +58,17 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 		}
 
 		entities := make(map[string]*domain.GraphEntity, len(entityTypes))
+		summaries := make(map[string]string, len(extraction.Entities))
 		for _, entity := range extraction.Entities {
 			stored, err := r.ensureEntity(tx, kbID, entity.Name, entity.Type, entity.Attributes)
 			if err != nil {
 				return err
 			}
-			entities[domain.NormalizeGraphName(entity.Name)] = stored
+			key := domain.NormalizeGraphName(entity.Name)
+			entities[key] = stored
+			if summary := strings.TrimSpace(entity.Summary); summary != "" {
+				summaries[stored.ID] = summary
+			}
 		}
 		for _, relation := range extraction.Relations {
 			for _, name := range []string{relation.Source, relation.Target} {
@@ -73,6 +81,27 @@ func (r *GraphRepository) ReplaceNodeExtraction(ctx context.Context, kbID, nodeI
 					return err
 				}
 				entities[key] = stored
+			}
+		}
+		for entityID, summary := range summaries {
+			stored := &domain.GraphEntitySummary{
+				ID:            newGraphID(),
+				KBID:          kbID,
+				EntityID:      entityID,
+				NodeID:        nodeID,
+				NodeReleaseID: nodeReleaseID,
+				Summary:       summary,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{{Name: "entity_id"}, {Name: "node_id"}},
+				DoUpdates: clause.Assignments(map[string]any{
+					"kb_id":           gorm.Expr("EXCLUDED.kb_id"),
+					"node_release_id": gorm.Expr("EXCLUDED.node_release_id"),
+					"summary":         gorm.Expr("EXCLUDED.summary"),
+					"updated_at":      gorm.Expr("NOW()"),
+				}),
+			}).Create(stored).Error; err != nil {
+				return err
 			}
 		}
 

@@ -36,9 +36,10 @@ const (
 )
 
 const (
-	MaxGraphEntityNameLength = 160
-	MaxGraphEvidenceLength   = 512
-	MaxGraphFactsPerNode     = 80
+	MaxGraphEntityNameLength    = 160
+	MaxGraphEntitySummaryLength = 600
+	MaxGraphEvidenceLength      = 512
+	MaxGraphFactsPerNode        = 80
 )
 
 var (
@@ -85,9 +86,26 @@ type GraphEvidence struct {
 
 func (GraphEvidence) TableName() string { return "graph_evidence" }
 
+// GraphEntitySummary is a source-scoped model summary. It is never shared
+// globally because its contents may be derived from a node the caller cannot
+// visit.
+type GraphEntitySummary struct {
+	ID            string    `json:"id" gorm:"primaryKey;type:text"`
+	KBID          string    `json:"kb_id" gorm:"column:kb_id;not null;index"`
+	EntityID      string    `json:"entity_id" gorm:"not null;index"`
+	NodeID        string    `json:"node_id" gorm:"not null;index"`
+	NodeReleaseID string    `json:"node_release_id" gorm:"not null"`
+	Summary       string    `json:"summary" gorm:"not null"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (GraphEntitySummary) TableName() string { return "graph_entity_summaries" }
+
 type GraphExtractedEntity struct {
 	Name       string          `json:"name"`
 	Type       GraphEntityType `json:"type"`
+	Summary    string          `json:"summary,omitempty"`
 	Attributes GraphAttributes `json:"attributes,omitempty"`
 }
 
@@ -111,6 +129,9 @@ func (e GraphExtraction) Validate() error {
 	for _, entity := range e.Entities {
 		if !validGraphEntityType(entity.Type) || !validGraphLabel(entity.Name) {
 			return fmt.Errorf("%w: invalid entity", ErrInvalidGraphExtraction)
+		}
+		if utf8.RuneCountInString(strings.TrimSpace(entity.Summary)) > MaxGraphEntitySummaryLength {
+			return fmt.Errorf("%w: entity summary exceeds limit", ErrInvalidGraphExtraction)
 		}
 	}
 	for _, relation := range e.Relations {
@@ -149,9 +170,15 @@ func SanitizeGraphExtraction(extraction GraphExtraction, schema KnowledgeSchema)
 		}
 		attributes, droppedAttributes := schema.sanitizeEntityAttributes(entity.Type, entity.Attributes)
 		discarded += droppedAttributes
+		summary := strings.TrimSpace(entity.Summary)
+		if utf8.RuneCountInString(summary) > MaxGraphEntitySummaryLength {
+			summary = ""
+			discarded++
+		}
 		cleaned.Entities = append(cleaned.Entities, GraphExtractedEntity{
 			Name:       entity.Name,
 			Type:       entity.Type,
+			Summary:    summary,
 			Attributes: attributes,
 		})
 	}

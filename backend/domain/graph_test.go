@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -86,6 +88,32 @@ func TestSanitizeGraphExtractionKeepsValidFactsAndDropsSchemaViolations(t *testi
 	require.Len(t, cleaned.Entities, 1)
 	require.Equal(t, GraphAttributes{"argument": {"supported claim"}}, cleaned.Entities[0].Attributes)
 	require.Len(t, cleaned.Relations, 1)
+	require.NoError(t, cleaned.Validate())
+}
+
+func TestSanitizeGraphExtractionRetainsBoundedEntitySummaries(t *testing.T) {
+	extraction, err := DecodeGraphExtraction(`{
+		"entities": [
+			{"name": "Short summary", "type": "concept", "summary": "A concise source-scoped description."},
+			{"name": "Empty summary", "type": "concept", "summary": "   "},
+			{"name": "Long summary", "type": "concept", "summary": "` + strings.Repeat("x", MaxGraphEntitySummaryLength+1) + `"}
+		],
+		"relations": []
+	}`)
+	require.NoError(t, err)
+
+	cleaned, discarded, err := SanitizeGraphExtraction(extraction, DefaultKnowledgeSchema())
+	require.NoError(t, err)
+	require.Equal(t, 1, discarded)
+	require.Len(t, cleaned.Entities, 3)
+
+	encoded, err := json.Marshal(cleaned.Entities)
+	require.NoError(t, err)
+	require.JSONEq(t, `[
+		{"name":"Short summary","type":"concept","summary":"A concise source-scoped description."},
+		{"name":"Empty summary","type":"concept"},
+		{"name":"Long summary","type":"concept"}
+	]`, string(encoded))
 	require.NoError(t, cleaned.Validate())
 }
 
