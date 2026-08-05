@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -63,7 +64,36 @@ func (u *PluginRecordUsecase) CreateGroup(ctx context.Context, input PluginRecor
 		return nil, domain.ErrPermissionDenied
 	}
 	group := &domain.PluginRecordGroup{KBID: strings.TrimSpace(input.KBID), Name: strings.TrimSpace(input.Name), MemberUserIDs: input.MemberUserIDs, CreatedBy: userID}
+	if err := u.validateGroupMembers(ctx, group); err != nil {
+		return nil, err
+	}
 	if err := u.groups.Create(ctx, group); err != nil {
+		return nil, err
+	}
+	return group, nil
+}
+
+func (u *PluginRecordUsecase) UpdateGroup(ctx context.Context, groupID string, input PluginRecordGroupWrite) (*domain.PluginRecordGroup, error) {
+	userID, _, err := u.viewer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	controller, err := u.isKnowledgeBaseController(ctx, input.KBID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !controller {
+		return nil, domain.ErrPermissionDenied
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(groupID), 10, 64)
+	if err != nil || id <= 0 {
+		return nil, fmt.Errorf("invalid plugin record group id")
+	}
+	group := &domain.PluginRecordGroup{ID: id, KBID: strings.TrimSpace(input.KBID), Name: strings.TrimSpace(input.Name), MemberUserIDs: input.MemberUserIDs}
+	if err := u.validateGroupMembers(ctx, group); err != nil {
+		return nil, err
+	}
+	if err := u.groups.Update(ctx, group); err != nil {
 		return nil, err
 	}
 	return group, nil
@@ -171,6 +201,22 @@ func (u *PluginRecordUsecase) validateWrite(ctx context.Context, record *domain.
 	}
 	if record.Access.Visibility == domain.PluginRecordVisibilityGroups {
 		return u.groups.ValidateIDsBelongToKnowledgeBase(ctx, record.KBID, record.Access.SharedGroupIDs)
+	}
+	return nil
+}
+
+func (u *PluginRecordUsecase) validateGroupMembers(ctx context.Context, group *domain.PluginRecordGroup) error {
+	if err := group.Validate(); err != nil {
+		return err
+	}
+	for _, memberUserID := range group.MemberUserIDs {
+		allowed, err := u.accessRepo.ValidateKBPerm(group.KBID, memberUserID, consts.UserKBPermissionNotNull)
+		if err != nil {
+			return fmt.Errorf("validate plugin record group member: %w", err)
+		}
+		if !allowed {
+			return fmt.Errorf("plugin record group member does not have knowledge base access")
+		}
 	}
 	return nil
 }

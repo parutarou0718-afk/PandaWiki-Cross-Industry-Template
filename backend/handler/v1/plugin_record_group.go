@@ -1,7 +1,9 @@
 package v1
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -27,6 +29,7 @@ func NewPluginRecordGroupHandler(e *echo.Echo, base *handler.BaseHandler, auth m
 	group := e.Group("/api/v1/knowledge_base/plugin-record-groups", auth.Authorize)
 	group.GET("", h.List, auth.ValidateKBUserPerm(consts.UserKBPermissionNotNull))
 	group.POST("", h.Create, auth.ValidateKBUserPerm(consts.UserKBPermissionFullControl))
+	group.PUT("/:id", h.Update, auth.ValidateKBUserPerm(consts.UserKBPermissionFullControl))
 	return h
 }
 func (h *PluginRecordGroupHandler) List(c echo.Context) error {
@@ -41,13 +44,43 @@ func (h *PluginRecordGroupHandler) List(c echo.Context) error {
 	return h.NewResponseWithData(c, groups)
 }
 func (h *PluginRecordGroupHandler) Create(c echo.Context) error {
-	var request pluginRecordGroupRequest
-	if err := c.Bind(&request); err != nil {
+	request, err := decodePluginRecordGroupWrite(c.Request().Body)
+	if err != nil {
 		return h.NewResponseWithError(c, "invalid plugin record group request", err)
 	}
-	group, err := h.usecase.CreateGroup(c.Request().Context(), usecase.PluginRecordGroupWrite{KBID: strings.TrimSpace(request.KBID), Name: strings.TrimSpace(request.Name), MemberUserIDs: request.MemberUserIDs})
+	group, err := h.usecase.CreateGroup(c.Request().Context(), request)
 	if err != nil {
 		return h.NewResponseWithError(c, "create plugin record group failed", err)
 	}
 	return h.NewResponseWithData(c, group)
+}
+
+func (h *PluginRecordGroupHandler) Update(c echo.Context) error {
+	request, err := decodePluginRecordGroupWrite(c.Request().Body)
+	if err != nil {
+		return h.NewResponseWithError(c, "invalid plugin record group request", err)
+	}
+	group, err := h.usecase.UpdateGroup(c.Request().Context(), c.Param("id"), request)
+	if err != nil {
+		return h.NewResponseWithError(c, "update plugin record group failed", err)
+	}
+	return h.NewResponseWithData(c, group)
+}
+
+func decodePluginRecordGroupWrite(reader io.Reader) (usecase.PluginRecordGroupWrite, error) {
+	var request pluginRecordGroupRequest
+	decoder := json.NewDecoder(reader)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return usecase.PluginRecordGroupWrite{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return usecase.PluginRecordGroupWrite{}, io.ErrUnexpectedEOF
+	}
+	return usecase.PluginRecordGroupWrite{
+		KBID:          strings.TrimSpace(request.KBID),
+		Name:          strings.TrimSpace(request.Name),
+		MemberUserIDs: request.MemberUserIDs,
+	}, nil
 }
